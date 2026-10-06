@@ -97,7 +97,8 @@ The comparison report is written to `reports/model_comparison.json`. It records 
 ### Future Works
 
 1. Run the application with large sample of euron data, check for failures/bugs and fix.
-2. Optimize temperature of the model.
+2. Optimize temperature of the model. Generate multiple files for different values of temperature. 
 3. Extend this to documents with other types.
 4. Multi modal application (structured/unstructured data, PIIs, images etc.)
 5. Fine Tuning SLM based on synthetic data generated from LLM. (Distilation Application)
+6. Translation to Other languages.
