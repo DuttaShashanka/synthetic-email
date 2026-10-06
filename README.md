@@ -92,25 +92,12 @@ Compare the bundled 1B, 3B, 8B, and 31B model candidates on the same seeded samp
 python -m src.compare_models --sample-size 25 --seed 417
 ```
 
-The comparison report is written to `reports/model_comparison.json`. It records model acceptance, validator risk, LLM-judge scores, token usage, and cost using provider-reported usage when available or the live OpenRouter catalogue rates otherwise. The recommendation selects the lowest generation-cost candidate within 0.25 points of the highest mean judge score, requiring at least 90% generation and judge coverage; judge cost is reported separately as evaluation overhead. The current catalogue has no clearly identified 0.6B text-generation candidate, so 1B is used as the smallest tier. This small paired sample is a pilot rather than a parameter-controlled or corpus-representative study.
-
-### Recorded Comparison Results
-
-Run on 2026-10-06 with seed `417`, 25 messages, and `openai/gpt-4o-mini` as the fixed judge:
-
-| Generation model | Parameters | Mean judge score (1-5) | Generation acceptance | Mean generation cost / email | Mean eval cost / email (incl. judge) |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `meta-llama/llama-3.2-1b-instruct` | 1B | 4.105 | 76% | $0.000158 | $0.000278 |
-| `meta-llama/llama-3.2-3b-instruct` | 3B | 4.514 | 84% | $0.000241 | $0.000379 |
-| `meta-llama/llama-3.1-8b-instruct` | 8B | 4.526 | 76% | $0.000055 | $0.000159 |
-| `google/gemma-4-31b-it` | 31B | 4.520 | 80% | $0.000382 | $0.000509 |
-
-Under the pre-registered rule (at least 90% generation and judge coverage, within 0.25 points of the highest mean judge score, lowest generation cost), no model qualified at n=25: acceptance was 76–84%, below the 90% gate, so the recorded recommendation is null and the coverage floor should scale with sample size or retries. Relaxing the coverage gate, Llama 3.1 8B is best value: highest mean judge score (4.526), lowest generation cost, and lowest total evaluation cost ($0.000159/email). The 3B/8B/31B means differ by at most 0.012 points, within judge noise. Gemma 4 31B showed the lowest validator risk (mean 0.0001) and 5-gram overlap (max 0.002) but cost ~7× more than 8B and needed both attempts for 10 of 25 messages. All failures were fail-closed; three messages failed for every model. Model families differ as well as parameter count, so this is an initial screening result, not a controlled scaling study.
-
-**Post-run fixes.** The low acceptance was traced to pipeline defects (embedded-forward header clobbering, placeholder-token copying, common-phrase deny terms, legacy `X-To` header loss, and a Subject-restoration gap), all fixed and verified against the failed datapoints: 15 of the 21 originally-failing (sample, model) pairs pass at the two-attempt budget, and 5 of the 6 residual 5-gram-overlap cases pass with three attempts. See [Experiment Results](reports/experiment_results.md) for the failure-mode analysis. Re-running the comparison after these fixes is expected to raise acceptance materially.
+The comparison report is written to `reports/model_comparison.json`. It records model acceptance, validator risk, LLM-judge scores, token usage, and cost using provider-reported usage when available or the live OpenRouter catalogue rates otherwise. The recommendation selects the lowest generation-cost candidate within 0.25 points of the highest mean judge score, requiring at least 90% generation and judge coverage; judge cost is reported separately as evaluation overhead. This small paired sample is a pilot rather than a parameter-controlled or corpus-representative study.
 
 ### Future Works
 
-1. Extend this to documents with other types.
-2. Multi modal application (structured/unstructured data, PIIs, images etc.)
-3. Fine Tuning SLM based on synthetic data generated from LLM. (Distilation Application)
+1. Run the application with large sample of euron data, check for failures/bugs and fix.
+2. Optimize temperature of the model.
+3. Extend this to documents with other types.
+4. Multi modal application (structured/unstructured data, PIIs, images etc.)
+5. Fine Tuning SLM based on synthetic data generated from LLM. (Distilation Application)
