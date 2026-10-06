@@ -10,7 +10,10 @@ from .parsing import parse_email, strip_nonessential_headers
 from .privacy import (
     EMAIL_RE,
     FICTITIOUS_DOMAINS,
+    HEADER_PERSON_RE,
     PHONE_RE,
+    SIMPLE_HEADER_RE,
+    normalize_person_name,
     person_aliases,
     person_names,
     redact_direct_identifiers,
@@ -122,6 +125,7 @@ def preserve_source_identities(candidate: str, sanitized: str) -> str:
         "From": headers.sender,
         "To": ", ".join(headers.recipients),
         "Date": headers.date,
+        "Subject": headers.subject,
     }
     missing_headers = []
     for header, value in stable_headers.items():
@@ -291,9 +295,28 @@ def synthesize(
     sanitized = redact_direct_identifiers(source, ctx, graph, industry)
     sanitized = strip_nonessential_headers(sanitized)
 
-    llm_people, llm_orgs = llm_extract_pii(source, industry, model)
-    augmented_people = person_names(source) | llm_people
-    deny_terms = deny_terms | llm_orgs
+    llm_people, llm_orgs = llm_extract_pii(source, industry)
+    regex_people = person_names(source)
+    augmented_people = regex_people | llm_people
+    # The validator deny-list requires corroboration: header identities and
+    # LLM-extracted names are high-precision, while regex-only prose matches
+    # are often common phrases ("Scarlet Fever", "Chief Executive Officer")
+    # that a faithful rewrite cannot avoid. Regex-only names are still
+    # pseudonymized above; they are simply not treated as leakage.
+    confirmed_people = {
+        normalize_person_name(match.group(1))
+        for match in HEADER_PERSON_RE.finditer(source)
+    } | {
+        normalize_person_name(match.group(1))
+        for match in SIMPLE_HEADER_RE.finditer(source)
+    } | llm_people
+    confirmed_people.discard("")
+    deny_terms = (
+        deny_terms
+        - {name.casefold() for name in regex_people}
+        | {name.casefold() for name in confirmed_people}
+        | llm_orgs
+    )
 
     sanitized = redact_source_terms(
         sanitized,

@@ -4,6 +4,15 @@ from .models import ParsedEmail
 
 HEADER_RE = re.compile(r"^(X-From|X-To|X-Cc|X-Bcc|From|To|Cc|Bcc|Date|Subject):[ \t]*(.*)$", re.IGNORECASE | re.MULTILINE)
 PROVIDER_HEADERS = {"from", "to", "cc", "date", "subject"}
+# Legacy Enron-style headers carry real recipient/sender identities
+# and must survive sanitization (renamed to their standard form) so
+# the rewrite model does not have to invent recipients.
+LEGACY_HEADER_ALIASES = {
+    "x-from": "From",
+    "x-to": "To",
+    "x-cc": "Cc",
+    "x-bcc": "Bcc",
+}
 
 
 def _display_name(value: str) -> str:
@@ -37,9 +46,15 @@ def _recipient_identity(value: str) -> str:
 
 
 def parse_email(raw: str) -> ParsedEmail:
-    headers = {m.group(1).lower(): m.group(2).strip() for m in HEADER_RE.finditer(raw)}
-    first_blank = re.search(r"\r?\n\r?\n", raw)
-    body = raw[first_blank.end():].strip() if first_blank else raw.strip()
+    separator = re.search(r"\r?\n\r?\n", raw)
+    # Only the top header block is authoritative: forwarded messages embedded
+    # in the body carry their own From/To lines that must not clobber the
+    # real headers (later matches would otherwise overwrite earlier ones).
+    header_block = raw[: separator.start()] if separator else raw
+    headers: dict[str, str] = {}
+    for match in HEADER_RE.finditer(header_block):
+        headers.setdefault(match.group(1).lower(), match.group(2).strip())
+    body = raw[separator.end():].strip() if separator else raw.strip()
     recipients = []
     for standard, legacy in (("to", "x-to"), ("cc", "x-cc"), ("bcc", "x-bcc")):
         recipients.extend(_recipient_names(headers.get(legacy) or headers.get(standard, "")))
@@ -66,6 +81,7 @@ def strip_nonessential_headers(raw: str) -> str:
         return raw
 
     retained = []
+    retained_canonical: set[str] = set()
     keep_continuation = False
     for line in raw[:separator.start()].splitlines():
         if line[:1].isspace():
@@ -73,8 +89,17 @@ def strip_nonessential_headers(raw: str) -> str:
                 retained.append(line)
             continue
         header_name, delimiter, _ = line.partition(":")
-        keep_continuation = bool(delimiter) and header_name.casefold() in PROVIDER_HEADERS
-        if keep_continuation:
+        key = header_name.strip().casefold()
+        canonical = LEGACY_HEADER_ALIASES.get(key)
+        is_provider = key in PROVIDER_HEADERS or canonical is not None
+        keep_continuation = bool(delimiter) and is_provider
+        if keep_continuation and is_provider:
+            canonical_key = (canonical or header_name).casefold()
+            if canonical_key in retained_canonical:
+                continue
+            retained_canonical.add(canonical_key)
+            if canonical:
+                line = f"{canonical}:{line.partition(':')[2]}"
             retained.append(line)
 
     return "\n".join(retained) + "\n\n" + raw[separator.end():]

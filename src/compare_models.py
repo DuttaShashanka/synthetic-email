@@ -267,7 +267,7 @@ def compare_models(
         "value_recommendation": choose_value_model(model_results, score_tolerance),
         "model_results": model_results,
         "limitations": [
-            "Five unstratified examples are a pilot, not a statistically representative comparison.",
+            f"{len(selected)} unstratified examples are a pilot, not a statistically representative comparison.",
             "Parameter counts and catalogue prices are provider metadata and can change; MoE active parameter counts may differ from total size.",
             "LLM-judge scores are subjective utility measures, not privacy guarantees or human evaluation.",
             "Model family, instruction tuning, and provider routing vary along with parameter count, so this is not a controlled parameter-only experiment.",

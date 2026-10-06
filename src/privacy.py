@@ -44,6 +44,57 @@ NON_IDENTIFYING_TERMS = {
     "this", "that", "please", "the", "both", "in", "if", "others", "thank",
     "there", "these", "those", "when", "while", "after",
 }
+DEFAULT_EXTRACTOR_MODEL = "meta-llama/llama-3.1-8b-instruct"
+LEGAL_ORG_SUFFIX_RE = re.compile(
+    r"\b(?:inc\.?|llc|l\.?l\.?c\.?|ltd\.?|limited|corporation|corp\.?|company|co\.?|"
+    r"lp|llp|plc|pty\.?|gmbh|ag|sa|nv|bv|pjsc|pvt\.?|holdings|partners|partnership|"
+    r"industries|systems|services|solutions|consulting|technologies|labs)\b",
+    re.I,
+)
+COMMON_PHRASE_WORDS = NON_IDENTIFYING_TERMS | {
+    "you", "your", "yours", "we", "our", "us", "all", "everyone", "team",
+    "friend", "friends", "colleagues", "hello", "hi", "morning", "afternoon",
+    "evening", "today", "tomorrow", "yes", "no", "okay",
+}
+
+
+def _name_word_set(attribute: str) -> set[str]:
+    from faker.providers.person.en_US import Provider as EnUSPerson
+    value = getattr(EnUSPerson, attribute)
+    if callable(value) and not isinstance(value, dict):
+        value = value()
+    if isinstance(value, dict):
+        return {str(key).casefold() for key in value}
+    return {str(item).casefold() for item in value}
+
+
+_GIVEN_NAMES = _name_word_set("first_names")
+_FAMILY_NAMES = _name_word_set("last_names")
+
+
+def _plausible_person(name: str, text: str) -> bool:
+    words = name.split()
+    if len(words) < 2:
+        return False
+    if any(word.casefold() in COMMON_PHRASE_WORDS for word in words):
+        return False
+    # At least one part must look like a real given or family name,
+    # so common Title Case phrases ("Scarlet Fever", "Chief
+    # Executive Officer") are never treated as person names.
+    if not (
+        words[0].casefold() in _GIVEN_NAMES
+        or words[-1].casefold() in _FAMILY_NAMES
+    ):
+        return False
+    return name.casefold() in text.casefold()
+
+
+def _plausible_organization(name: str, text: str) -> bool:
+    if not name or name.casefold() not in text.casefold():
+        return False
+    if " " not in name.strip():
+        return True
+    return bool(LEGAL_ORG_SUFFIX_RE.search(name))
 
 
 def stable_index(value: str, count: int) -> int:
@@ -329,12 +380,43 @@ def fake_project(value: str, industry: str = "general business") -> str:
     return generate_pseudonym("project", value, industry)
 
 
+def _neutral_substitute(term: str) -> str:
+    """Generic stand-in for non-person source terms that cannot be pseudonymized.
+
+    A natural phrase rather than a literal placeholder token, so the
+    generative model cannot copy an unresolved placeholder into the
+    output and fail post-generation validation.
+    """
+    core = term.strip()
+    if any(mark in core for mark in (".", "@", "/", " ")):
+        return "the organization"
+    if len(core) <= 6 and core.isalpha():
+        return "the project"
+    return "the organization"
+
+
 def llm_extract_pii(text: str, industry: str = "general business", model: str | None = None) -> tuple[set[str], set[str]]:
-    """Use the LLM to extract person names and organization names not caught by regex heuristics."""
+    """Use the LLM to extract person names and organization names not caught by regex heuristics.
+
+    Extraction uses a fixed default model so sanitization (and therefore
+    the sanitized input) is identical across generation models. Extracted
+    entities pass plausibility filters: organizations must be single words
+    or carry a legal/corporate suffix, and person names must be multi-word
+    names without common-phrase words, so everyday phrases (e.g. "Scarlet
+    Fever") are never treated as deny-listed identifiers.
+    """
     from .llm import extract_pii_entities
-    entities = extract_pii_entities(text, industry, model)
-    people = {value for entity_type, value in entities if entity_type == "person"}
-    orgs = {value for entity_type, value in entities if entity_type == "organization"}
+    entities = extract_pii_entities(text, industry, model or DEFAULT_EXTRACTOR_MODEL)
+    people = {
+        value
+        for entity_type, value in entities
+        if entity_type == "person" and _plausible_person(value, text)
+    }
+    orgs = {
+        value
+        for entity_type, value in entities
+        if entity_type == "organization" and _plausible_organization(value, text)
+    }
     return people, orgs
 
 
@@ -405,6 +487,6 @@ def redact_source_terms(
             if ctx is not None:
                 record_replacement(ctx, "person", person_name, replacement)
         else:
-            replacement = "[REDACTED_SOURCE_TERM]"
+            replacement = _neutral_substitute(term)
         text = re.sub(re.escape(term), lambda _: replacement, text, flags=re.I)
     return text

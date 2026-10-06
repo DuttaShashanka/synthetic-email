@@ -89,23 +89,25 @@ The report is written to `reports/sample_evaluation.json` and contains aggregate
 Compare the bundled 1B, 3B, 8B, and 31B model candidates on the same seeded sample:
 
 ```bash
-python -m src.compare_models --sample-size 5 --seed 417
+python -m src.compare_models --sample-size 25 --seed 417
 ```
 
 The comparison report is written to `reports/model_comparison.json`. It records model acceptance, validator risk, LLM-judge scores, token usage, and cost using provider-reported usage when available or the live OpenRouter catalogue rates otherwise. The recommendation selects the lowest generation-cost candidate within 0.25 points of the highest mean judge score, requiring at least 90% generation and judge coverage; judge cost is reported separately as evaluation overhead. The current catalogue has no clearly identified 0.6B text-generation candidate, so 1B is used as the smallest tier. This small paired sample is a pilot rather than a parameter-controlled or corpus-representative study.
 
 ### Recorded Comparison Results
 
-Run on 2026-10-06 with seed `417`, five messages, and `openai/gpt-4o-mini` as the fixed judge:
+Run on 2026-10-06 with seed `417`, 25 messages, and `openai/gpt-4o-mini` as the fixed judge:
 
-| Generation model | Parameters | Mean judge score (1-5) | Generation acceptance | Mean generation cost / email |
-| --- | ---: | ---: | ---: | ---: |
-| `meta-llama/llama-3.2-1b-instruct` | 1B | 4.00 | 100% | $0.000124 |
-| `meta-llama/llama-3.2-3b-instruct` | 3B | 4.32 | 100% | $0.000140 |
-| `meta-llama/llama-3.1-8b-instruct` | 8B | 4.56 | 100% | $0.000044 |
-| `google/gemma-4-31b-it` | 31B | 4.45 | 80% | $0.000507 |
+| Generation model | Parameters | Mean judge score (1-5) | Generation acceptance | Mean generation cost / email | Mean eval cost / email (incl. judge) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `meta-llama/llama-3.2-1b-instruct` | 1B | 4.105 | 76% | $0.000158 | $0.000278 |
+| `meta-llama/llama-3.2-3b-instruct` | 3B | 4.514 | 84% | $0.000241 | $0.000379 |
+| `meta-llama/llama-3.1-8b-instruct` | 8B | 4.526 | 76% | $0.000055 | $0.000159 |
+| `google/gemma-4-31b-it` | 31B | 4.520 | 80% | $0.000382 | $0.000509 |
 
-Under the stated rule, Llama 3.1 8B is the best value in this sample: it scored highest overall, had 100% acceptance, and had the lowest generation cost. Its mean evaluation cost, including judge overhead, was approximately `$0.000196` per email. The 31B model accepted four of five outputs. Model families differ as well as parameter count, so this is an initial screening result, not a controlled scaling study.
+Under the pre-registered rule (at least 90% generation and judge coverage, within 0.25 points of the highest mean judge score, lowest generation cost), no model qualified at n=25: acceptance was 76–84%, below the 90% gate, so the recorded recommendation is null and the coverage floor should scale with sample size or retries. Relaxing the coverage gate, Llama 3.1 8B is best value: highest mean judge score (4.526), lowest generation cost, and lowest total evaluation cost ($0.000159/email). The 3B/8B/31B means differ by at most 0.012 points, within judge noise. Gemma 4 31B showed the lowest validator risk (mean 0.0001) and 5-gram overlap (max 0.002) but cost ~7× more than 8B and needed both attempts for 10 of 25 messages. All failures were fail-closed; three messages failed for every model. Model families differ as well as parameter count, so this is an initial screening result, not a controlled scaling study.
+
+**Post-run fixes.** The low acceptance was traced to pipeline defects (embedded-forward header clobbering, placeholder-token copying, common-phrase deny terms, legacy `X-To` header loss, and a Subject-restoration gap), all fixed and verified against the failed datapoints: 15 of the 21 originally-failing (sample, model) pairs pass at the two-attempt budget, and 5 of the 6 residual 5-gram-overlap cases pass with three attempts. See [Experiment Results](reports/experiment_results.md) for the failure-mode analysis. Re-running the comparison after these fixes is expected to raise acceptance materially.
 
 ### Future Works
 

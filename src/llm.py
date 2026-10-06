@@ -74,6 +74,7 @@ def _openrouter_request(
     user_prompt: str,
     model: str | None = None,
     max_tokens: int = 100,
+    temperature: float = 0.7,
 ) -> str:
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
@@ -84,7 +85,7 @@ def _openrouter_request(
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json={
             "model": model,
-            "temperature": 0.7,
+            "temperature": temperature,
             "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -128,7 +129,7 @@ def extract_pii_entities(text: str, industry: str, model: str | None = None) -> 
         f"Target industry: {industry}.\n\n"
         f"Text:\n{text}"
     )
-    response = _openrouter_request(PII_EXTRACTION_SYSTEM_PROMPT, prompt, model, max_tokens=500)
+    response = _openrouter_request(PII_EXTRACTION_SYSTEM_PROMPT, prompt, model, max_tokens=500, temperature=0)
     entities: list[tuple[str, str]] = []
     for line in response.strip().splitlines():
         line = line.strip()
