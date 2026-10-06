@@ -1,0 +1,9 @@
+# Experiment Plan
+
+**Objective.** Prototype a workflow that transforms Enron email into realistic messages for eDiscovery-related model training while reducing source-identifying information and retaining useful communication structure.
+
+**Research.** De-identification is a risk-management problem: removing direct identifiers alone does not establish anonymity. NIST SP 800-188 and ICO anonymisation guidance support evaluating disclosure risk alongside intended data utility. Stadler et al. (USENIX Security 2022) show that synthetic data can retain privacy risks, so an LLM should not be treated as the privacy boundary. This motivates deterministic pre-provider substitutions, a persistent pseudonym graph, post-generation leakage checks, and separate utility evaluation.
+
+**Method.** Profile the authorized local sample using aggregate-only statistics. For a reproducible pilot, select five eligible messages with seed `417`, transform each using the same sanitizer and entity graph, and compare paired 1B, 3B, 8B, and 31B models. Score accepted outputs with one fixed, independent LLM judge on purpose preservation, relationship preservation, realism, structure, and training utility. Record validator risk, n-gram overlap, acceptance, message-length ratios, token usage, and cost. Send only sanitized source and generated candidates to providers; never store message text in the report.
+
+**References:** [NIST SP 800-188](https://doi.org/10.6028/NIST.SP.800-188); [ICO anonymisation guidance](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/data-sharing/anonymisation/); [Stadler et al., “Synthetic Data—Anonymisation Groundhog Day”](https://www.usenix.org/conference/usenixsecurity22/presentation/stadler).

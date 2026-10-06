@@ -1,0 +1,131 @@
+{
+  "method": "deterministic privacy/overlap checks plus LLM-as-judge utility scoring",
+  "sample_seed": 417,
+  "eligible_dataset_rows": 1000,
+  "requested_sample_size": 5,
+  "actual_sample_size": 5,
+  "industry": "professional services",
+  "generation_model": "meta-llama/llama-3.1-8b-instruct",
+  "judge_model": "openai/gpt-4o-mini",
+  "privacy_note": "Only sanitized source text and generated candidates were sent to OpenRouter. Raw source messages and text outputs are not included in this report.",
+  "metrics": {
+    "generation_acceptance_rate": 1.0,
+    "judge_scoring_rate": 1.0,
+    "mean_validator_risk": 0.002,
+    "mean_5gram_overlap": 0.0023,
+    "source_message_chars_mean": 2734,
+    "source_message_chars_median": 2858,
+    "source_message_chars_p90": 5035.0,
+    "candidate_message_chars_mean": 1087.8,
+    "candidate_to_source_length_ratio_mean": 0.4892,
+    "llm_judge_score_means_1_to_5": {
+      "purpose_preservation": 4.2,
+      "relationship_preservation": 4.4,
+      "email_realism": 4.2,
+      "structure_quality": 4.6,
+      "training_utility": 4.6
+    }
+  },
+  "sample_results": [
+    {
+      "sample_number": 1,
+      "source_chars": 640,
+      "source_required_headers": 4,
+      "status": "scored",
+      "generation_attempts": 1,
+      "validator_risk": 0.0,
+      "ngram_overlap": 0.0,
+      "warning_count": 0,
+      "candidate_chars": 546,
+      "candidate_source_length_ratio": 0.8531,
+      "judge_scores": {
+        "purpose_preservation": 4,
+        "relationship_preservation": 5,
+        "email_realism": 4,
+        "structure_quality": 5,
+        "training_utility": 4
+      }
+    },
+    {
+      "sample_number": 2,
+      "source_chars": 2858,
+      "source_required_headers": 4,
+      "status": "scored",
+      "generation_attempts": 1,
+      "validator_risk": 0.0,
+      "ngram_overlap": 0.0,
+      "warning_count": 0,
+      "candidate_chars": 1129,
+      "candidate_source_length_ratio": 0.395,
+      "judge_scores": {
+        "purpose_preservation": 4,
+        "relationship_preservation": 3,
+        "email_realism": 4,
+        "structure_quality": 4,
+        "training_utility": 5
+      }
+    },
+    {
+      "sample_number": 3,
+      "source_chars": 5035,
+      "source_required_headers": 4,
+      "status": "scored",
+      "generation_attempts": 2,
+      "validator_risk": 0.006,
+      "ngram_overlap": 0.0065,
+      "warning_count": 0,
+      "candidate_chars": 1212,
+      "candidate_source_length_ratio": 0.2407,
+      "judge_scores": {
+        "purpose_preservation": 5,
+        "relationship_preservation": 5,
+        "email_realism": 4,
+        "structure_quality": 4,
+        "training_utility": 5
+      }
+    },
+    {
+      "sample_number": 4,
+      "source_chars": 3406,
+      "source_required_headers": 4,
+      "status": "scored",
+      "generation_attempts": 1,
+      "validator_risk": 0.005,
+      "ngram_overlap": 0.0052,
+      "warning_count": 0,
+      "candidate_chars": 1820,
+      "candidate_source_length_ratio": 0.5344,
+      "judge_scores": {
+        "purpose_preservation": 3,
+        "relationship_preservation": 4,
+        "email_realism": 4,
+        "structure_quality": 5,
+        "training_utility": 4
+      }
+    },
+    {
+      "sample_number": 5,
+      "source_chars": 1731,
+      "source_required_headers": 4,
+      "status": "scored",
+      "generation_attempts": 1,
+      "validator_risk": 0.0,
+      "ngram_overlap": 0.0,
+      "warning_count": 0,
+      "candidate_chars": 732,
+      "candidate_source_length_ratio": 0.4229,
+      "judge_scores": {
+        "purpose_preservation": 5,
+        "relationship_preservation": 5,
+        "email_realism": 5,
+        "structure_quality": 5,
+        "training_utility": 5
+      }
+    }
+  ],
+  "limitations": [
+    "The sample is reproducible but not stratified; results are not estimates for the full Enron corpus.",
+    "LLM-judge scores are subjective utility signals, not privacy guarantees or human evaluation.",
+    "The report intentionally omits source messages, generated text, file paths, and identifiers."
+  ]
+}

@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/secrets.toml
+synthetic_email.txt
+validation_report.json
+.DS_Store
+data/
+Technical Assessment - Lead Data Scientist (Consilio Labs).txt

@@ -1,0 +1,517 @@
+{
+  "method": "paired deterministic sample; deterministic privacy validator; fixed independent LLM judge",
+  "sample_seed": 417,
+  "eligible_dataset_rows": 1000,
+  "sample_size": 5,
+  "industry": "professional services",
+  "judge_model": "openai/gpt-4o-mini",
+  "judge_pricing_per_million_tokens": {
+    "input_usd": 0.15,
+    "output_usd": 0.6
+  },
+  "privacy_note": "Only sanitized source emails and synthetic candidates were sent to OpenRouter. Raw message text and generated content are not included in this report.",
+  "unavailable_parameter_tiers": [
+    {
+      "parameter_billions": 0.6,
+      "reason": "No clearly identified 0.6B text-generation model was found in the live OpenRouter catalogue; the 1B model is the nearest available small tier."
+    }
+  ],
+  "value_recommendation": {
+    "model": "meta-llama/llama-3.1-8b-instruct",
+    "parameter_billions": 8.0,
+    "mean_judge_score": 4.56,
+    "mean_generation_cost_usd": 4.365e-05,
+    "mean_total_eval_cost_usd": 0.00019617,
+    "best_mean_judge_score": 4.56,
+    "quality_tolerance": 0.25,
+    "minimum_generation_and_judge_coverage": 0.9,
+    "selection_rule": "lowest mean generation cost per requested email among models with sufficient coverage and within tolerance of the highest mean judge score; judge cost is reported separately"
+  },
+  "model_results": [
+    {
+      "model": "meta-llama/llama-3.2-1b-instruct",
+      "parameter_billions": 1.0,
+      "pricing_per_million_tokens": {
+        "input_usd": 0.027,
+        "output_usd": 0.201
+      },
+      "generation_acceptance_rate": 1.0,
+      "judge_scoring_rate": 1.0,
+      "mean_judge_score": 4.0,
+      "mean_validator_risk": 0.0066,
+      "mean_5gram_overlap": 0.0066,
+      "mean_candidate_source_length_ratio": 0.9346,
+      "mean_generation_cost_usd": 0.00012368,
+      "total_generation_cost_usd": 0.0006184,
+      "mean_judge_cost_usd": 0.00017664,
+      "total_judge_cost_usd": 0.0008832,
+      "mean_total_eval_cost_usd": 0.00030032,
+      "total_eval_cost_usd": 0.0015016,
+      "usage_pricing_basis": "provider-reported cost when available; otherwise provider token counts multiplied by current catalogue rates",
+      "sample_results": [
+        {
+          "sample_number": 1,
+          "status": "scored",
+          "generation_attempts": 2,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 1.3453,
+          "generation_cost_usd": 6.9147e-05,
+          "judge_cost_usd": 9.9e-05,
+          "total_cost_usd": 0.000168147,
+          "generation_prompt_tokens": 819,
+          "generation_completion_tokens": 234,
+          "judge_scores": {
+            "purpose_preservation": 3,
+            "relationship_preservation": 4,
+            "email_realism": 3,
+            "structure_quality": 4,
+            "training_utility": 4
+          }
+        },
+        {
+          "sample_number": 2,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.005,
+          "ngram_overlap": 0.0052,
+          "candidate_source_length_ratio": 0.549,
+          "generation_cost_usd": 0.000148389,
+          "judge_cost_usd": 0.0001602,
+          "total_cost_usd": 0.00030858899999999996,
+          "generation_prompt_tokens": 1193,
+          "generation_completion_tokens": 578,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 3,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 3,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.028,
+          "ngram_overlap": 0.0278,
+          "candidate_source_length_ratio": 0.2929,
+          "generation_cost_usd": 0.000106905,
+          "judge_cost_usd": 0.00017505,
+          "total_cost_usd": 0.00028195499999999997,
+          "generation_prompt_tokens": 1272,
+          "generation_completion_tokens": 361,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 4,
+            "email_realism": 3,
+            "structure_quality": 3,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 4,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.5443,
+          "generation_cost_usd": 0.000117264,
+          "judge_cost_usd": 0.0002043,
+          "total_cost_usd": 0.000321564,
+          "generation_prompt_tokens": 807,
+          "generation_completion_tokens": 475,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 5,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 1.9417,
+          "generation_cost_usd": 0.000176691,
+          "judge_cost_usd": 0.00024465,
+          "total_cost_usd": 0.000421341,
+          "generation_prompt_tokens": 797,
+          "generation_completion_tokens": 772,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 3,
+            "training_utility": 5
+          }
+        }
+      ]
+    },
+    {
+      "model": "meta-llama/llama-3.2-3b-instruct",
+      "parameter_billions": 3.0,
+      "pricing_per_million_tokens": {
+        "input_usd": 0.05,
+        "output_usd": 0.33
+      },
+      "generation_acceptance_rate": 1.0,
+      "judge_scoring_rate": 1.0,
+      "mean_judge_score": 4.32,
+      "mean_validator_risk": 0.0024,
+      "mean_5gram_overlap": 0.0024,
+      "mean_candidate_source_length_ratio": 0.6247,
+      "mean_generation_cost_usd": 0.00014027,
+      "total_generation_cost_usd": 0.00070134,
+      "mean_judge_cost_usd": 0.00015786,
+      "total_judge_cost_usd": 0.0007893,
+      "mean_total_eval_cost_usd": 0.00029813,
+      "total_eval_cost_usd": 0.00149064,
+      "usage_pricing_basis": "provider-reported cost when available; otherwise provider token counts multiplied by current catalogue rates",
+      "sample_results": [
+        {
+          "sample_number": 1,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 1.1297,
+          "generation_cost_usd": 7.616e-05,
+          "judge_cost_usd": 9.285e-05,
+          "total_cost_usd": 0.00016900999999999998,
+          "generation_prompt_tokens": 388,
+          "generation_completion_tokens": 172,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 5,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 4
+          }
+        },
+        {
+          "sample_number": 2,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.8114,
+          "generation_cost_usd": 0.00019165,
+          "judge_cost_usd": 0.00018075,
+          "total_cost_usd": 0.0003724,
+          "generation_prompt_tokens": 1193,
+          "generation_completion_tokens": 400,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 3,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.012,
+          "ngram_overlap": 0.012,
+          "candidate_source_length_ratio": 0.2465,
+          "generation_cost_usd": 0.0001611869,
+          "judge_cost_usd": 0.0001647,
+          "total_cost_usd": 0.0003258869,
+          "generation_prompt_tokens": 1291,
+          "generation_completion_tokens": 285,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 4,
+            "email_realism": 3,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 4,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.512,
+          "generation_cost_usd": 0.0001770484,
+          "judge_cost_usd": 0.00019725,
+          "total_cost_usd": 0.0003742984,
+          "generation_prompt_tokens": 826,
+          "generation_completion_tokens": 403,
+          "judge_scores": {
+            "purpose_preservation": 3,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 5,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.424,
+          "generation_cost_usd": 9.529e-05,
+          "judge_cost_usd": 0.00015375,
+          "total_cost_usd": 0.00024904,
+          "generation_prompt_tokens": 797,
+          "generation_completion_tokens": 168,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 5,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        }
+      ]
+    },
+    {
+      "model": "meta-llama/llama-3.1-8b-instruct",
+      "parameter_billions": 8.0,
+      "pricing_per_million_tokens": {
+        "input_usd": 0.05,
+        "output_usd": 0.08
+      },
+      "generation_acceptance_rate": 1.0,
+      "judge_scoring_rate": 1.0,
+      "mean_judge_score": 4.56,
+      "mean_validator_risk": 0.0,
+      "mean_5gram_overlap": 0.0,
+      "mean_candidate_source_length_ratio": 0.5414,
+      "mean_generation_cost_usd": 4.365e-05,
+      "total_generation_cost_usd": 0.00021823,
+      "mean_judge_cost_usd": 0.00015252,
+      "total_judge_cost_usd": 0.0007626,
+      "mean_total_eval_cost_usd": 0.00019617,
+      "total_eval_cost_usd": 0.00098083,
+      "usage_pricing_basis": "provider-reported cost when available; otherwise provider token counts multiplied by current catalogue rates",
+      "sample_results": [
+        {
+          "sample_number": 1,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.9984,
+          "generation_cost_usd": 1.581e-05,
+          "judge_cost_usd": 9.09e-05,
+          "total_cost_usd": 0.00010671,
+          "generation_prompt_tokens": 388,
+          "generation_completion_tokens": 161,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 5,
+            "email_realism": 5,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 2,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.3943,
+          "generation_cost_usd": 2.946e-05,
+          "judge_cost_usd": 0.00014745,
+          "total_cost_usd": 0.00017691,
+          "generation_prompt_tokens": 1193,
+          "generation_completion_tokens": 112,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 3,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.2465,
+          "generation_cost_usd": 4.054e-05,
+          "judge_cost_usd": 0.00016545,
+          "total_cost_usd": 0.00020599000000000003,
+          "generation_prompt_tokens": 1272,
+          "generation_completion_tokens": 302,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 5,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 4
+          }
+        },
+        {
+          "sample_number": 4,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.537,
+          "generation_cost_usd": 7.49e-05,
+          "judge_cost_usd": 0.0001992,
+          "total_cost_usd": 0.0002741,
+          "generation_prompt_tokens": 826,
+          "generation_completion_tokens": 420,
+          "judge_scores": {
+            "purpose_preservation": 3,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 5,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.5309,
+          "generation_cost_usd": 5.752e-05,
+          "judge_cost_usd": 0.0001596,
+          "total_cost_usd": 0.00021712,
+          "generation_prompt_tokens": 816,
+          "generation_completion_tokens": 209,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 5,
+            "email_realism": 5,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        }
+      ]
+    },
+    {
+      "model": "google/gemma-4-31b-it",
+      "parameter_billions": 31.0,
+      "pricing_per_million_tokens": {
+        "input_usd": 0.09,
+        "output_usd": 0.34
+      },
+      "generation_acceptance_rate": 0.8,
+      "judge_scoring_rate": 0.8,
+      "mean_judge_score": 4.45,
+      "mean_validator_risk": 0.0,
+      "mean_5gram_overlap": 0.0,
+      "mean_candidate_source_length_ratio": 0.5382,
+      "mean_generation_cost_usd": 0.00050727,
+      "total_generation_cost_usd": 0.00253637,
+      "mean_judge_cost_usd": 0.00011934,
+      "total_judge_cost_usd": 0.0005967,
+      "mean_total_eval_cost_usd": 0.00062661,
+      "total_eval_cost_usd": 0.00313307,
+      "usage_pricing_basis": "provider-reported cost when available; otherwise provider token counts multiplied by current catalogue rates",
+      "sample_results": [
+        {
+          "sample_number": 1,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.7375,
+          "generation_cost_usd": 8.804e-05,
+          "judge_cost_usd": 8.535e-05,
+          "total_cost_usd": 0.00017339,
+          "generation_prompt_tokens": 435,
+          "generation_completion_tokens": 131,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 5,
+            "email_realism": 5,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 2,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.7953,
+          "generation_cost_usd": 0.00135875,
+          "judge_cost_usd": 0.00018585,
+          "total_cost_usd": 0.0015446,
+          "generation_prompt_tokens": 1293,
+          "generation_completion_tokens": 389,
+          "judge_scores": {
+            "purpose_preservation": 5,
+            "relationship_preservation": 4,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 3,
+          "status": "generation_failed",
+          "failure_category": "validation_blocked",
+          "generation_attempts": 2,
+          "generation_cost_usd": 0.0006781
+        },
+        {
+          "sample_number": 4,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.3691,
+          "generation_cost_usd": 0.00029114,
+          "judge_cost_usd": 0.0001815,
+          "total_cost_usd": 0.00047264,
+          "generation_prompt_tokens": 902,
+          "generation_completion_tokens": 591,
+          "judge_scores": {
+            "purpose_preservation": 3,
+            "relationship_preservation": 4,
+            "email_realism": 3,
+            "structure_quality": 4,
+            "training_utility": 5
+          }
+        },
+        {
+          "sample_number": 5,
+          "status": "scored",
+          "generation_attempts": 1,
+          "validator_risk": 0.0,
+          "ngram_overlap": 0.0,
+          "candidate_source_length_ratio": 0.2507,
+          "generation_cost_usd": 0.00012034,
+          "judge_cost_usd": 0.000144,
+          "total_cost_usd": 0.00026434,
+          "generation_prompt_tokens": 843,
+          "generation_completion_tokens": 106,
+          "judge_scores": {
+            "purpose_preservation": 4,
+            "relationship_preservation": 5,
+            "email_realism": 4,
+            "structure_quality": 5,
+            "training_utility": 4
+          }
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Five unstratified examples are a pilot, not a statistically representative comparison.",
+    "Parameter counts and catalogue prices are provider metadata and can change; MoE active parameter counts may differ from total size.",
+    "LLM-judge scores are subjective utility measures, not privacy guarantees or human evaluation.",
+    "Model family, instruction tuning, and provider routing vary along with parameter count, so this is not a controlled parameter-only experiment."
+  ]
+}
