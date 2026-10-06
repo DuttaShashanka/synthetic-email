@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from typing import Iterable, Set
 from faker import Faker
 from .entity_graph import EntityGraph
+from .llm import generate_pseudonym
 from .models import TransformContext
 
 fake = Faker("en_US")
@@ -30,6 +31,7 @@ PLACEHOLDER_RE = re.compile(r"\[\[[A-Z_]+_\d+\]\]")
 PROJECT_RE = re.compile(r"\b[A-Z]{2,}(?:[- ][A-Z0-9]{2,})*\b")
 ORG_SUFFIX_RE = re.compile(r"\b[A-Z][A-Za-z&.,' -]{2,}?\s+(?:Inc\.?|LLC|L\.L\.C\.?|Ltd\.?|Limited|Corporation|Corp\.?|Company|Co\.?|LP|LLP|PLC|Pvt\.?\s*Ltd\.?)\b")
 HEADER_PERSON_RE = re.compile(r"(?im)^(?:X-)?(?:From|To|Cc|Bcc):\s*([^<\n]+?)\s*<([^>\s]+)>")
+SIMPLE_HEADER_RE = re.compile(r"(?im)^(?:X-)?(?:From|To|Cc|Bcc):\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+([^\s<>@]+@[^\s<>@>]+)")
 SALUTATION_RE = re.compile(r"\bDear[ \t]+([A-Z][a-z]+(?:[-'][A-Za-z]+)?(?:[ \t]+[A-Z][a-z]+(?:[-'][A-Za-z]+)?)?)")
 SIGNATURE_NAME_RE = re.compile(r"(?im)^\s*([A-Z][a-z]+(?:[-'][A-Za-z]+)?(?:\s+[A-Z][a-z]+(?:[-'][A-Za-z]+)?){1,2})\s*$")
 PERSON_NAME_RE = re.compile(r"\b[A-Z][a-z]+(?:[-'][A-Za-z]+)?(?:[ \t]+[A-Z][a-z]+(?:[-'][A-Za-z]+)?){1,2}\b")
@@ -48,9 +50,8 @@ def stable_index(value: str, count: int) -> int:
     return int(hashlib.sha256(value.lower().encode()).hexdigest(), 16) % count
 
 
-def fake_name(value: str) -> str:
-    fake.seed_instance(stable_index(value, 10_000_000))
-    return fake.name()
+def fake_name(value: str, industry: str = "general business") -> str:
+    return generate_pseudonym("person", value, industry)
 
 
 def record_replacement(
@@ -91,8 +92,12 @@ def normalize_person_name(value: str) -> str:
 def email_matches_person(source_email: str, person_name: str) -> bool:
     local_part = re.sub(r"[^a-z0-9]", "", source_email.rsplit("@", 1)[0].casefold())
     name_parts = re.findall(r"[a-z]+", normalize_person_name(person_name).casefold())
-    if len(name_parts) < 2:
-        return False
+    if not name_parts:
+        raw_parts = re.findall(r"[a-z]+", person_name.casefold())
+        if len(raw_parts) < 1 or len(raw_parts[0]) < 3:
+            return False
+        given_name = raw_parts[0]
+        return local_part.startswith(given_name) and len(given_name) >= 3
 
     given_name, surname = name_parts[0], name_parts[-1]
     possible_local_parts = {
@@ -109,17 +114,18 @@ def fake_email(
     ctx: TransformContext,
     graph: EntityGraph,
     person_name: str | None = None,
+    industry: str = "general business",
 ) -> str:
     if source_email not in ctx.email_map:
         person_key = person_name or source_email
-        name = graph.resolve("person", person_key, lambda: fake_name(person_key))
+        name = graph.resolve("person", person_key, lambda: fake_name(person_key, industry))
         parts = re.sub(r"[^a-zA-Z ]", "", name).lower().split()
         local = ".".join(parts[:2]) if len(parts) > 1 else parts[0]
         source_domain = source_email.rsplit("@", 1)[-1].lower()
         domain = graph.resolve(
             "synthetic_domain_v3",
             source_domain,
-            lambda: FICTITIOUS_DOMAINS[stable_index(source_domain, len(FICTITIOUS_DOMAINS))],
+            lambda: generate_pseudonym("domain", source_domain, industry),
         )
         candidate = f"{local}@{domain}"
         ctx.email_map[source_email] = graph.resolve(
@@ -161,7 +167,7 @@ def replacement_phone(value: str, ctx: TransformContext) -> str:
 
 
 def redact_direct_identifiers(
-    text: str, ctx: TransformContext, graph: EntityGraph | None = None
+    text: str, ctx: TransformContext, graph: EntityGraph | None = None, industry: str = "general business"
 ) -> str:
     graph = graph or EntityGraph()
     known_people: dict[str, tuple[str, str]] = {}
@@ -173,19 +179,44 @@ def redact_direct_identifiers(
         name = normalize_person_name(raw_name)
         address = match.group(2)
         if name:
-            replacement = graph.resolve("person", name, lambda: fake_name(name))
+            replacement = graph.resolve("person", name, lambda: fake_name(name, industry))
             record_replacement(ctx, "person", name, replacement)
             known_people[raw_name] = (replacement, address)
             known_people[name] = (replacement, address)
             email_people[address.casefold()] = name
-            graph.resolve("email", address, lambda: fake_email(address, ctx, graph, name))
+            graph.resolve("email", address, lambda: fake_email(address, ctx, graph, name, industry))
             graph.relate("person", name, "has_email", "email", address)
+
+    for match in SIMPLE_HEADER_RE.finditer(text):
+        raw_name = match.group(1).strip()
+        name = raw_name
+        address = match.group(2)
+        if address.casefold() in email_people:
+            continue
+        if any(word.lower() in NON_IDENTIFYING_TERMS for word in name.split()):
+            continue
+        replacement = graph.resolve("person", name, lambda: fake_name(name, industry))
+        record_replacement(ctx, "person", name, replacement)
+        known_people[raw_name] = (replacement, address)
+        known_people[name] = (replacement, address)
+        email_people[address.casefold()] = name
+        graph.resolve("email", address, lambda: fake_email(address, ctx, graph, name, industry))
+        graph.relate("person", name, "has_email", "email", address)
 
     for pattern in (SALUTATION_RE, SIGNATURE_NAME_RE):
         for match in pattern.finditer(text):
             name = match.group(1).strip()
             if name not in known_people:
-                known_people[name] = (graph.resolve("person", name, lambda: fake_name(name),), "")
+                matched = False
+                for known_name, (replacement, address) in known_people.items():
+                    known_normalized = normalize_person_name(known_name)
+                    if known_normalized and known_normalized.split()[0].lower() == name.lower():
+                        short = replacement.split()[0] if replacement else replacement
+                        known_people[name] = (short, address)
+                        matched = True
+                        break
+                if not matched:
+                    known_people[name] = (graph.resolve("person", name, lambda: fake_name(name, industry)), None)
 
     candidate_people = set(person_names(text))
     candidate_people.update(
@@ -200,11 +231,27 @@ def redact_direct_identifiers(
         matches = [name for name in candidate_people if email_matches_person(address, name)]
         if len(matches) == 1:
             name = matches[0]
-            replacement = graph.resolve("person", name, lambda: fake_name(name))
+            replacement = graph.resolve("person", name, lambda: fake_name(name, industry))
             record_replacement(ctx, "person", name, replacement)
             known_people[name] = (replacement, address)
             email_people[address] = name
             graph.relate("person", name, "has_email", "email", address)
+        elif not matches:
+            for known_name, (replacement, _) in known_people.items():
+                if email_matches_person(address, known_name) and known_name not in candidate_people:
+                    known_people[known_name] = (replacement, address)
+                    email_people[address] = known_name
+                    graph.relate("person", known_name, "has_email", "email", address)
+                    break
+
+    email_placeholders: dict[str, str] = {}
+
+    def _protect_email(match: re.Match[str]) -> str:
+        key = f"[[EMAIL_{len(email_placeholders)}]]"
+        email_placeholders[key] = match.group(0)
+        return key
+
+    text = EMAIL_RE.sub(_protect_email, text)
 
     for name, (replacement, address) in sorted(
         known_people.items(), key=lambda item: len(item[0]), reverse=True
@@ -213,12 +260,11 @@ def redact_direct_identifiers(
         if address:
             graph.relate("person", name, "has_email", "email", address)
 
-    text = EMAIL_RE.sub(
-        lambda match: fake_email(
-            match.group(0), ctx, graph, email_people.get(match.group(0).casefold())
-        ),
-        text,
-    )
+    for placeholder, email in email_placeholders.items():
+        replacement = fake_email(
+            email, ctx, graph, email_people.get(email.casefold()), industry
+        )
+        text = text.replace(placeholder, replacement)
 
     def redact_url(match: re.Match[str]) -> str:
         replacement = "https://portal.northstar.example"
@@ -256,7 +302,7 @@ def redact_direct_identifiers(
         text = text.replace(f"[[DATE_{index}]]", replacement)
     def redact_organization(match: re.Match[str]) -> str:
         replacement = graph.resolve(
-            "organization", match.group(0), lambda: fake_company(match.group(0))
+            "organization", match.group(0), lambda: fake_company(match.group(0), industry)
         )
         record_replacement(ctx, "organization", match.group(0), replacement)
         return replacement
@@ -265,7 +311,7 @@ def redact_direct_identifiers(
         source_value = match.group(0)
         if source_value in COMMON_ACRONYMS:
             return source_value
-        replacement = graph.resolve("project", source_value, lambda: fake_project(source_value))
+        replacement = graph.resolve("project", source_value, lambda: fake_project(source_value, industry))
         record_replacement(ctx, "project", source_value, replacement)
         return replacement
 
@@ -275,14 +321,21 @@ def redact_direct_identifiers(
     return text
 
 
-def fake_company(value: str) -> str:
-    fake.seed_instance(stable_index(value, 10_000_000))
-    return fake.company()
+def fake_company(value: str, industry: str = "general business") -> str:
+    return generate_pseudonym("organization", value, industry)
 
 
-def fake_project(value: str) -> str:
-    fake.seed_instance(stable_index(value, 10_000_000))
-    return f"Project {fake.word().title()}"
+def fake_project(value: str, industry: str = "general business") -> str:
+    return generate_pseudonym("project", value, industry)
+
+
+def llm_extract_pii(text: str, industry: str = "general business", model: str | None = None) -> tuple[set[str], set[str]]:
+    """Use the LLM to extract person names and organization names not caught by regex heuristics."""
+    from .llm import extract_pii_entities
+    entities = extract_pii_entities(text, industry, model)
+    people = {value for entity_type, value in entities if entity_type == "person"}
+    orgs = {value for entity_type, value in entities if entity_type == "organization"}
+    return people, orgs
 
 
 def source_terms(raw: str, extra_terms: Iterable[str] = ()) -> Set[str]:
@@ -338,6 +391,7 @@ def redact_source_terms(
     known_people: Iterable[str] = (),
     known_aliases: dict[str, str] | None = None,
     ctx: TransformContext | None = None,
+    industry: str = "general business",
 ) -> str:
     graph = graph or EntityGraph()
     person_keys = {re.sub(r"\s+", " ", name.strip().casefold()) for name in known_people}
@@ -347,7 +401,7 @@ def redact_source_terms(
         normalized_term = re.sub(r"\s+", " ", term.strip().casefold())
         if normalized_term in person_keys:
             person_name = (known_aliases or {}).get(normalized_term, term)
-            replacement = graph.resolve("person", person_name, lambda: fake_name(person_name))
+            replacement = graph.resolve("person", person_name, lambda: fake_name(person_name, industry))
             if ctx is not None:
                 record_replacement(ctx, "person", person_name, replacement)
         else:

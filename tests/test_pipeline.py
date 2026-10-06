@@ -1,13 +1,18 @@
 import re
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
 from src.entity_graph import EntityGraph
 from src.entity_graph import entity_key
 
-from src.pipeline import apply_replacement_edits, preserve_source_identities, retry_guidance, synthesize
-from src.privacy import fake_email, person_aliases, person_names, redact_direct_identifiers, redact_source_terms, source_terms
+from src.pipeline import apply_replacement_edits, preserve_source_identities, retry_guidance, synthesize, SIGNOFFS
+from src.privacy import EMAIL_RE, fake_email, llm_extract_pii, person_aliases, person_names, redact_direct_identifiers, redact_source_terms, source_terms
 from src.parsing import parse_email, strip_nonessential_headers
 from src.validate import validate_output
 from src.models import TransformContext
+
 
 SOURCE = """From: jane.doe@enron.com
 To: john.smith@enron.com
@@ -20,6 +25,45 @@ Regards,
 Jane Doe
 """
 
+
+_STABLE_NAMES = ["Jordan Smith", "Taylor Reed", "Morgan Lee", "Casey Kim", "Riley Chen"]
+_name_counter = {"n": 0}
+
+
+_STABLE_DOMAINS = ["northstarfieldservices.com", "harborpeakconsulting.com", "verdantbridgesolutions.com"]
+_domain_counter = {"n": 0}
+
+_SIGNOFF_PHRASES = "|".join(sorted((p for p, _ in SIGNOFFS), key=len, reverse=True))
+
+
+def _fake_generate_pseudonym(entity_type, source_value, industry, model=None):
+    if entity_type == "person":
+        _name_counter["n"] += 1
+        return _STABLE_NAMES[(_name_counter["n"] - 1) % len(_STABLE_NAMES)]
+    if entity_type == "organization":
+        return "Acme Solutions"
+    if entity_type == "project":
+        return "Project Phoenix"
+    if entity_type == "domain":
+        _domain_counter["n"] += 1
+        return _STABLE_DOMAINS[(_domain_counter["n"] - 1) % len(_STABLE_DOMAINS)]
+    raise ValueError(f"Unexpected entity type: {entity_type}")
+
+
+@pytest.fixture(autouse=True)
+def _patch_llm():
+    """Patch generate_pseudonym and extract_pii_entities so tests run without an OpenRouter API key."""
+    _name_counter["n"] = 0
+    _domain_counter["n"] = 0
+
+    def _fake_extract_pii(text, industry, model=None):
+        """Mock PII extraction: return empty sets to mimic regex-only fallback."""
+        return [], []
+
+    with patch(
+        "src.privacy.generate_pseudonym", side_effect=_fake_generate_pseudonym
+    ), patch("src.llm.extract_pii_entities", side_effect=_fake_extract_pii):
+        yield
 
 def test_redacts_direct_identifiers():
     from src.models import TransformContext
@@ -344,7 +388,7 @@ steps, and responsibilities for the next phase of work.
     assert report.valid
     assert "alex.morgan@customfictional.com" in updated_sanitized
     assert "alex.morgan@customfictional.com" in updated_candidate
-    assert updated_candidate.rstrip().endswith("Regards,\nAlex Morgan")
+    assert re.search(rf"(?:{_SIGNOFF_PHRASES}),\n(?:Alex Morgan|Alex)$", updated_candidate.rstrip())
     assert updated_records[1]["replacement"] == "alex.morgan@customfictional.com"
     assert graph.resolve("person", "Alice Source", lambda: "") == "Alex Morgan"
     assert graph.resolve(
@@ -480,10 +524,10 @@ Taylor Reed
 
     stable_identity_headers = ("From: alex.morgan@northstarfieldservices.com", "To: sam.lee@harborpeakconsulting.com", "Date: 2024-08-14")
     assert all(header in first and header in second for header in stable_identity_headers)
-    assert first.count("Regards,\nAlex Morgan") == 1
-    assert second.count("Regards,\nAlex Morgan") == 1
-    assert "Best regards" not in first
-    assert "Thanks," not in second
+    assert re.search(rf"(?:{_SIGNOFF_PHRASES}),\n(?:Alex Morgan|Alex)", first)
+    assert re.search(rf"(?:{_SIGNOFF_PHRASES}),\n(?:Alex Morgan|Alex)", second)
+    assert "Olivia Chen" not in first
+    assert "Taylor Reed" not in second
 
 
 def test_model_preamble_and_duplicate_closings_are_removed():
@@ -511,9 +555,10 @@ Best, maria.lewis Regards, Maria Lewis
     assert output.startswith("From: alex.morgan@northstarfieldservices.com")
     assert "Here is a rewritten email" not in output
     assert "---" not in output
-    assert "Best," not in output
-    assert output.count("Regards,\nAlex Morgan") == 1
-    assert output.rstrip().endswith("Regards,\nAlex Morgan")
+    assert "maria.lewis" not in output
+    assert "Maria Lewis" not in output
+    assert re.search(rf"(?:{_SIGNOFF_PHRASES}),\n(?:Alex Morgan|Alex)", output)
+    assert re.search(rf"(?:{_SIGNOFF_PHRASES}),\n(?:Alex Morgan|Alex)$", output.rstrip())
 
 
 def test_rfc_email_date_is_replaced_deterministically(tmp_path):
@@ -642,3 +687,213 @@ def test_retry_guidance_is_category_based_and_does_not_echo_leaked_terms():
     assert "substantially different wording" in guidance
     assert "source-specific names" in guidance
     assert "let" not in guidance
+
+
+def test_llm_extracted_pii_from_body_is_pseudonymized(tmp_path):
+    """Verify that person names found by LLM extraction (e.g. in body text) get pseudonymized."""
+    from src.llm import extract_pii_entities
+
+    source = """From: bill.giuliani@enron.com
+To: andrew.fastow@enron.com
+Date: 2001-06-07
+Subject: DASH approval
+
+Dear Andrew,
+
+The DASH has been approved and signed by RAC and JEDI II and is now
+awaiting Mark Haedicke's review and approval. Please call me at
+(412) 490-9048 if you have questions.
+
+Best regards,
+Bill Giuliani
+"""
+
+    def _mock_extract(text, industry, model=None):
+        return [("person", "Mark Haedicke")]
+
+    _name_counter["n"] = 0
+    _domain_counter["n"] = 0
+
+    with patch(
+        "src.privacy.generate_pseudonym", side_effect=_fake_generate_pseudonym
+    ), patch("src.llm.extract_pii_entities", side_effect=_mock_extract):
+        graph = EntityGraph(tmp_path / "llm-pii.sqlite")
+        ctx = TransformContext()
+        deny_terms = source_terms(source)
+
+        llm_people, llm_orgs = llm_extract_pii(source, "energy")
+        augmented_people = person_names(source) | llm_people
+        deny_terms = deny_terms | llm_orgs
+
+        sanitized = redact_direct_identifiers(source, ctx, graph, "energy")
+        sanitized = strip_nonessential_headers(sanitized)
+        sanitized = redact_source_terms(
+            sanitized,
+            deny_terms,
+            graph,
+            augmented_people,
+            person_aliases(source),
+            ctx,
+            "energy",
+        )
+
+        assert "mark haedicke" not in sanitized.lower()
+        assert "haedicke" not in sanitized.lower()
+
+
+def test_salutation_uses_same_pseudonym_as_known_person(tmp_path):
+    """Verify 'Dear Andrew' uses the first name of the pseudonym for 'Andrew Fastow'
+    from the To header, not a separate generated name."""
+    from src.models import TransformContext
+
+    source = """From: Bill Giuliani <bill.giuliani@enron.com>
+To: Andrew Fastow <andrew.fastow@enron.com>
+Date: 2001-06-07
+Subject: Test
+
+Dear Andrew, please review the DPR transaction for $11 million.
+Regards,
+Bill Giuliani
+"""
+    graph = EntityGraph(tmp_path / "salutation.sqlite")
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph, "energy")
+
+    andrew_replacement = graph.resolve("person", "Andrew Fastow", lambda: "")
+    expected_salutation_name = andrew_replacement.split()[0] if andrew_replacement else ""
+
+    assert "Dear Andrew" not in sanitized
+    assert expected_salutation_name, "Expected a non-empty pseudonym for Andrew Fastow"
+    assert f"Dear {expected_salutation_name}" in sanitized
+
+
+def test_closing_phrase_is_not_always_regards():
+    """Verify that preserve_source_identities uses varied closings across runs."""
+    sanitized = """From: alex.morgan@northstarfieldservices.com
+To: sam.lee@harborpeakconsulting.com
+Date: 2024-08-14
+Subject: Stable synthetic subject
+
+Sanitized message body.
+"""
+    candidate = """From: Olivia Chen <olivia.chen@verdantbridgesolutions.com>
+To: Peter Hall <peter.hall@northstarfieldservices.com>
+Date: 2025-01-02
+Subject: Re: A different generated subject
+
+Different generated body.
+
+Best regards,
+Olivia Chen
+"""
+
+    closings = set()
+    for _ in range(20):
+        output = preserve_source_identities(candidate, sanitized)
+        lines = output.rstrip().splitlines()
+        closing_phrase = lines[-2].rstrip(",")
+        closings.add(closing_phrase)
+
+    assert len(closings) > 1, f"Expected variety in closings, got {closings}"
+    valid_closings = {"Thanks", "Best", "Thank you", "Regards", "Best regards", "Kind regards", "Best wishes"}
+    assert closings.issubset(valid_closings)
+
+
+def test_single_name_signoff_is_stripped_not_duplicated():
+    """Verify a model sign-off using just the sender's first name is stripped, not duplicated."""
+    sanitized = """From: jensen.rutledge@northstarfieldservices.com
+To: morgan.chen@harborpeakconsulting.com
+Date: 2024-08-14
+Subject: Stable synthetic subject
+
+Sanitized message body.
+"""
+    candidate = """From: Jensen Rutledge <jensen.rutledge@verdantbridgesolutions.com>
+To: Morgan Chen <morgan.chen@northstarfieldservices.com>
+Date: 2025-01-02
+Subject: Re: A different generated subject
+
+Different generated body.
+
+Thanks,
+Jensen
+"""
+    output = preserve_source_identities(candidate, sanitized)
+
+    signoff_count = len(re.findall(r"(?i)\b(?:thanks|regards|best|kind regards|thank you)\b\s*,?", output))
+    assert signoff_count <= 1, f"Expected at most one sign-off phrase, got {signoff_count}:\n{output}"
+
+
+def test_to_header_name_before_email_links_to_salutation(tmp_path):
+    """Verify 'To: Sylvan cameron.rutledge@...' links Sylvan to the email, not a separate identity."""
+    from src.models import TransformContext
+
+    source = """From: reed.fenton@norconcorp.com
+To: Sylvan cameron.rutledge@northshorecapitalgroup.com
+Date: 2025-03-06 07:48:00
+Subject: Update on the Aurora Initiative Investment
+
+Dear Sylvan,
+Please review the attached materials.
+"""
+
+    graph = EntityGraph(tmp_path / "simple-header.sqlite")
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph, "energy")
+
+    sylvan_replacement = graph.resolve("person", "Sylvan", lambda: "")
+    assert sylvan_replacement, "Expected Sylvan to be in the entity graph"
+
+    lines = sanitized.splitlines()
+    to_line = next(line for line in lines if line.lower().startswith("to:"))
+    salutation_line = next(line for line in lines if line.lower().startswith("dear"))
+
+    to_email_match = EMAIL_RE.search(to_line)
+    assert to_email_match, f"Expected an email in To header: {to_line}"
+    to_local = to_email_match.group(0).rsplit("@", 1)[0]
+    to_first = to_local.split(".")[0] if "." in to_local else to_local
+
+    salutation_name = salutation_line.split("Dear ", 1)[1].rstrip(",.")
+
+    sylvan_parts = sylvan_replacement.split()
+    sylvan_first = sylvan_parts[0].lower()
+
+    assert to_first.lower() == sylvan_first, (
+        f"To header local part '{to_first}' doesn't match salutation name '{sylvan_first}' from pseudonym '{sylvan_replacement}'"
+    )
+
+
+def test_bare_email_with_salutation_single_name_links_to_email(tmp_path):
+    """Verify 'To: snhka.harper@nron.com' with 'Dear Snhka' links the name to the email."""
+    from src.models import TransformContext
+
+    source = """From: willian.giuliani@enron.com
+To: snhka.harper@nron.com
+Date: 2001-06-07 07:48:00
+Subject: Approval of the DPR transaction
+
+Dear Snhka,
+Please review the transaction details.
+"""
+
+    graph = EntityGraph(tmp_path / "bare-email.sqlite")
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph, "energy")
+
+    snhka_replacement = graph.resolve("person", "Snhka", lambda: "")
+    assert snhka_replacement, "Expected Snhka to be in the entity graph"
+
+    lines = sanitized.splitlines()
+    to_line = next(line for line in lines if line.lower().startswith("to:"))
+
+    to_email_match = EMAIL_RE.search(to_line)
+    assert to_email_match, f"Expected an email in To header: {to_line}"
+    to_local = to_email_match.group(0).rsplit("@", 1)[0]
+    to_first = to_local.split(".")[0] if "." in to_local else to_local
+
+    snhka_parts = snhka_replacement.split()
+    snhka_first = snhka_parts[0].lower()
+
+    assert to_first.lower() == snhka_first, (
+        f"To header local part '{to_first}' doesn't match salutation name '{snhka_first}' from pseudonym '{snhka_replacement}'"
+    )

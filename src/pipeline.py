@@ -1,7 +1,8 @@
 from dataclasses import asdict
 from pathlib import Path
+import random
 import re
-from typing import Any
+from typing import Any, Iterable
 from .entity_graph import EntityGraph
 from .llm import rewrite_with_openrouter
 from .models import TransformContext, ValidationReport
@@ -15,8 +16,20 @@ from .privacy import (
     redact_direct_identifiers,
     redact_source_terms,
     source_terms,
+    llm_extract_pii,
 )
 from .validate import FROM_EMAIL_RE, SIGN_OFF_RE, validate_output
+
+SIGNOFFS = [
+    ("Thanks", "first"),
+    ("Best", "first"),
+    ("Thank you", "full"),
+    ("Regards", "full"),
+    ("Best regards", "full"),
+    ("Thanks", "full"),
+    ("Kind regards", "full"),
+    ("Best wishes", "first"),
+]
 
 RESPONSE_PREAMBLE_RE = re.compile(
     r"(?i)^\s*(?:here(?:'s| is)\s+(?:(?:a|the)\s+)?(?:rewritten|synthetic)\s+email|rewritten email)\s*:\s*"
@@ -26,7 +39,10 @@ CLOSING_PHRASE_RE = re.compile(
 )
 
 
-def retry_guidance(report: ValidationReport) -> str:
+def retry_guidance(
+    report: ValidationReport,
+    allowed_domains: Iterable[str] = (),
+) -> str:
     errors = " ".join(report.errors).casefold()
     guidance = []
     if "source-derived term leaked" in errors or "source email leaked" in errors or "source phone leaked" in errors:
@@ -36,11 +52,12 @@ def retry_guidance(report: ValidationReport) -> str:
     if "placeholder" in errors:
         guidance.append("Remove all unresolved placeholders and provide complete fictional text.")
     if "sender email and sign-off name do not match" in errors:
-        guidance.append("Make the From email local part match the lowercase dot-separated sender name in the sign-off.")
+        guidance.append("Make the From email local part match the lowercase dot-separated sender name used in the sign-off.")
     if "missing required headers" in errors or "no email address" in errors or "non-fictional email domain" in errors:
+        domains = set(FICTITIOUS_DOMAINS) | set(allowed_domains)
         guidance.append(
             "Include From, To, Date, and Subject headers and use only these synthetic domains: "
-            + ", ".join(FICTITIOUS_DOMAINS)
+            + ", ".join(sorted(domains))
             + "."
         )
     return " ".join(guidance)
@@ -69,7 +86,8 @@ def strip_model_signoff(candidate: str) -> str:
 
     local_part = sender.group(1).rsplit("@", 1)[0]
     sender_name = re.sub(r"[._-]+", " ", local_part).strip()
-    variants = {local_part, sender_name}
+    first_name = local_part.split(".")[0]
+    variants = {local_part, sender_name, first_name}
     closings = list(CLOSING_PHRASE_RE.finditer(candidate))
     if not closings:
         return candidate.rstrip()
@@ -120,10 +138,13 @@ def preserve_source_identities(candidate: str, sanitized: str) -> str:
 
     sender_match = re.search(r"(?im)^From:\s*([^\s<>]+@[^\s<>]+)", candidate)
     if sender_match:
-        local_parts = sender_match.group(1).rsplit("@", 1)[0].split(".")
+        sender_email = sender_match.group(1)
+        local_parts = sender_email.rsplit("@", 1)[0].split(".")
         stable_sender_name = " ".join(part.title() for part in local_parts if part)
         if stable_sender_name:
-            candidate = candidate.rstrip() + f"\n\nRegards,\n{stable_sender_name}\n"
+            signoff, name_style = random.choice(SIGNOFFS)
+            sign_name = stable_sender_name.split()[0] if name_style == "first" else stable_sender_name
+            candidate = candidate.rstrip() + f"\n\n{signoff},\n{sign_name}\n"
     return candidate
 
 
@@ -267,15 +288,21 @@ def synthesize(
     ctx = TransformContext()
     graph = EntityGraph(entity_graph_path)
     deny_terms = source_terms(source)
-    sanitized = redact_direct_identifiers(source, ctx, graph)
+    sanitized = redact_direct_identifiers(source, ctx, graph, industry)
     sanitized = strip_nonessential_headers(sanitized)
+
+    llm_people, llm_orgs = llm_extract_pii(source, industry, model)
+    augmented_people = person_names(source) | llm_people
+    deny_terms = deny_terms | llm_orgs
+
     sanitized = redact_source_terms(
         sanitized,
         deny_terms,
         graph,
-        person_names(source),
+        augmented_people,
         person_aliases(source),
         ctx,
+        industry,
     )
     if replacement_sink is not None:
         reviewable_source = strip_nonessential_headers(source)
@@ -299,7 +326,7 @@ def synthesize(
         if report.valid:
             return candidate, report, sanitized, attempt
         last_report = report
-        guidance = retry_guidance(report)
+        guidance = retry_guidance(report, allowed_domains=graph.synthetic_email_domains())
 
     summary = "; ".join(last_report.errors) if last_report else "unknown validation failure"
     raise RuntimeError(f"Fail-closed: no safe candidate after {max_attempts} attempt(s): {summary}")

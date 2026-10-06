@@ -7,7 +7,7 @@ HEADER_RE = re.compile(r"^(From|To|Date|Subject):\s*.+$", re.I | re.M)
 FROM_EMAIL_RE = re.compile(r"^From:\s*(?:[^<\n]*<)?([^\s<>]+@[^\s<>]+)", re.I | re.M)
 SIGN_OFF_RE = re.compile(
     r"(?im)^\s*(?:best regards|kind regards|regards|sincerely|thank you|thanks),?\s*\n"
-    r"\s*([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,2})\s*$"
+    r"\s*([A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){0,2})\s*$"
 )
 TOKEN_RE = re.compile(r"[a-z0-9]{3,}", re.I)
 

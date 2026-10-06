@@ -52,18 +52,18 @@ class EntityGraph:
         make_replacement: Callable[[], str],
     ) -> str:
         identifier = entity_key(entity_type, source_value)
-        replacement = make_replacement()
         with sqlite3.connect(self.path) as connection:
+            row = connection.execute(
+                "SELECT replacement FROM entities WHERE entity_id = ?", (identifier,)
+            ).fetchone()
+            if row is not None:
+                return str(row[0])
+            replacement = make_replacement()
             connection.execute(
                 "INSERT OR IGNORE INTO entities VALUES (?, ?, ?)",
                 (identifier, entity_type, replacement),
             )
-            row = connection.execute(
-                "SELECT replacement FROM entities WHERE entity_id = ?", (identifier,)
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("Unable to resolve entity mapping")
-        return str(row[0])
+        return replacement
 
     def relate(
         self,

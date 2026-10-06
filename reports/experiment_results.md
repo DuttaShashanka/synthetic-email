@@ -7,19 +7,26 @@ source email
   ├── 1. Header parsing & PII harvesting
   │   Extract sender, recipients, dates, signatures, and salutations with
   │   regex heuristics (HEADER_PERSON_RE, SALUTATION_RE, SIGNATURE_NAME_RE,
-  │   SIGN_OFF_RE). Build a source-term deny-list (person names, organization
-  │   names, project codes, source domains).
-  ├── 2. Deterministic PII substitution (stable pseudonymization)
-  │   Replace direct identifiers with role-aware fictional equivalents using
-  │   a persistent entity graph (data/processed/entity_graph.sqlite):
-  │     · Email addresses → {name}@{northstarfieldservices|harborpeakconsulting|verdantbridgesolutions}.com
-  │     · Person names → stable SHA-256-seeded Faker names
+  │   SIGN_OFF_RE). Augment with LLM-based named-entity extraction to catch
+  │   person names and organization names appearing in the body text that
+  │   regex heuristics may miss. Build a source-term deny-list (person names,
+  │   organization names, project codes, source domains).
+  ├── 2. Direct PII pseudonymization (stable, role-aware)
+  │   Replace direct identifiers with fictional equivalents using a persistent
+  │   entity graph (data/processed/entity_graph.sqlite):
+  │     · Email addresses → {name}@{LLM-generated fictional domain}
+  │       Domains are generated via the OpenRouter LLM (domain entity type),
+  │       cached per source domain in the graph (synthetic_domain_v3) for
+  │       cross-email consistency.
+  │     · Person names → LLM-generated fictional names (cached in graph)
+  │     · Organizations → LLM-generated fictional company names (cached)
+  │     · Projects → LLM-generated fictional project names (cached)
   │     · Dates → deterministic replacement dates
   │     · Phone numbers → +1-202-555-xxxx
   │     · Money → randomized $25K–$874K amounts
   │     · Source domains/terms → redacted to "[REDACTED_SOURCE_TERM]" or
   │       industry-specific substitutes ("Northstar {Industry} Services")
-  │   The graph records (entity_type, source_value, replacement) and
+  │   The entity graph records (entity_type, source_value, replacement) and
   │   relationship edges (email belongs_to person, email uses_domain domain)
   │   so the same source person always maps to the same synthetic identity
   │   within and across runs.
@@ -41,7 +48,8 @@ source email
   │     · Source-term leakage (deny-list terms)
   │     · Placeholder leakage (unresolved [[TOKEN_N]] placeholders)
   │     · 5-gram overlap (normalized word 5-grams vs. sanitized source)
-  │     · Structural integrity (From, To, Date, Subject headers; readable body; valid synthetic domain)
+  │     · Structural integrity (From, To, Date, Subject headers; readable
+  │       body; valid synthetic domain from FICTITIOUS_DOMAINS or graph)
   │     · Sender/sign-off consistency (email local part ≟ sign-off name)
   ├── 6. Accept, retry, or fail closed
   │   If validation passes, the candidate is returned. If it fails, a
@@ -53,21 +61,14 @@ source email
 
 **PII removal strategy.** PII removal is layered, not single-point:
 
-- **Direct identifiers** (names, emails, phones, dates, money) are replaced
-  deterministically before any external call. The entity graph persists
-  mappings so that "Craig Carver <ccarver@alfers-carver.com>" always
-  maps to the same synthetic identity across emails and sessions.
-- **Quasi-identifiers** (organizations, project codes, distinctive
-  factual combinations) are abstracted to generic terms so the LLM
-  cannot reconstruct them.
-- **Post-generation checks** independently verify that no sanitized
-  value, source domain, or source term appears in the candidate. The
-  5-gram overlap check catches verbatim or near-verbatim copying of
-  sentence structure from the sanitized source.
-- **Hash-based identity** in the graph uses SHA-256 of the lowercased
-  source value. Hashes are not cryptographic anonymization — they are
-  reproducible mappings that prevent rainbow-table reversal by using
-  per-deployment graph files.
+- **Regex-based extraction** (headers, emails, phones, dates, salutations, signatures) provides structural PII detection and forms the initial deny-list.
+- **LLM-based extraction** augments regex by identifying person names and organization names that appear in the body text but may not match regex patterns (e.g., names in possessive form like "Mark Haedicke's", or names embedded in prose). These are merged into the known-people set before `redact_source_terms` runs.
+- **Salutation matching**: salutation first names (e.g., "Dear Andrew") are linked to the full person from the email headers (e.g., "Andrew Fastow <andrew.fastow@enron.com>") so the salutation uses the same pseudonym's first name rather than a separate generated identity.
+- **Varied closings**: the pipeline selects from multiple sign-off phrases (e.g., "Thanks, [First Name]", "Kind regards, [Full Name]") randomly per output, rather than always using "Regards, [Full Name]". The LLM system prompt also encourages natural sign-off variety.
+- **Direct identifiers** (names, emails, phones, dates, money) are replaced deterministically before any external call. The entity graph persists mappings so that "Craig Carver <ccarver@alfers-carver.com>" always maps to the same synthetic identity across emails and sessions.
+- **Quasi-identifiers** (organizations, project codes, distinctive factual combinations) are abstracted to generic terms so the LLM cannot reconstruct them.
+- **Post-generation checks** independently verify that no sanitized value, source domain, or source term appears in the candidate. The 5-gram overlap check catches verbatim or near-verbatim copying of sentence structure from the sanitized source.
+- **Hash-based identity** in the graph uses SHA-256 of the lowercased source value. Hashes are not cryptographic anonymization — they are reproducible mappings that prevent rainbow-table reversal by using per-deployment graph files.
 
 **Data distribution preservation.** The pipeline preserves the
 statistical properties of the source corpus at the communication-pattern
@@ -89,6 +90,10 @@ level rather than the literal-content level:
   industry-appropriate substitutes (e.g., "Enron" → "Northstar Agricultural
   Technology Services"), preserving domain context without preserving
   brand identity.
+- **Email domains**: domains are LLM-generated as realistic but fictional
+  corporate domains, cached per source domain in the entity graph for
+  cross-email consistency. The base `FICTITIOUS_DOMAINS` set is always
+  accepted by the validator, as are any graph-generated domains.
 
 No claim is made that literal word-frequency or content-topic
 distributions are preserved. The pipeline preserves purpose, relationship,
@@ -108,4 +113,6 @@ assessment prototype.
 
 With at least 90% generation/judge coverage and a 0.25-point quality margin, Llama 3.1 8B is best value. Generation cost averaged $0.000044/email ($0.000196 including judge overhead). The 31B model failed one of five generations. 8B/31B outputs averaged about half the source length, so length-distribution preservation remains a weakness.
 
-**Challenges and limitations.** Regex and lexical checks can miss identifiers or overmatch ordinary text; zero validator risk is not proof of privacy. Judge scores are subjective. This unstratified five-message pilot is neither human evaluation nor a controlled parameter-only study; model families and routing also differ. No clear 0.6B text model was listed, so 1B was the smallest tier. Reports exclude email text.
+**Changes since prior iteration.** The email domain assignment has changed from deterministic `FICTITIOUS_DOMAINS[stable_index(source_domain)]` selection to LLM-generated fictional domains (via `generate_pseudonym("domain", ...)`). The PII extraction step now includes LLM-based named-entity extraction to find person names and organizations in the body text that regex heuristics may miss (e.g., "Mark Haedicke" in possessive form in the body). Person names, organizations, and projects are now LLM-generated pseudonyms rather than Faker-based names. Additionally, salutation matching now links "Dear [First Name]" to the full person from the email headers so the salutation uses the same pseudonym's first name. Sign-off closings are now randomly selected from a set of natural phrases (e.g., "Thanks, [First Name]", "Kind regards, [Full Name]") rather than always using "Regards, [Full Name]", and the LLM system prompt encourages natural sign-off variety. The entity graph has been reset to provide a clean registry for the new method.
+
+**Challenges and limitations.** Regex and lexical checks can miss identifiers or overmatch ordinary text; zero validator risk is not proof of privacy. LLM-based extraction and generation add API costs and latency. Judge scores are subjective. The hybrid regex+LLM approach improves recall of body-level PII but does not eliminate false positives or false negatives. This unstratified five-message pilot is neither human evaluation nor a controlled parameter-only study; model families and routing also differ. No clear 0.6B text model was listed, so 1B was the smallest tier. Reports exclude email text.

@@ -170,7 +170,7 @@ if run_clicked:
         sanitized = redact_source_terms(sanitized, deny_terms)
         transformation = {
             "source": source,
-            "mode": mode,
+            "mode": model,
             "parsed": parsed,
             "sanitized": sanitized,
             "candidate": None,
