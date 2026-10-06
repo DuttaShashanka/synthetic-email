@@ -133,7 +133,7 @@ SAMPLE_EMAIL = Path(__file__).parent / "examples" / "input_email.txt"
 
 with st.sidebar:
     st.markdown('<p class="eyebrow">Run configuration</p>', unsafe_allow_html=True)
-    mode = st.radio("Rewrite mode", ["Offline", "OpenRouter"], index=0)
+    mode = st.radio("Rewrite mode", ["OpenRouter"], index=0)
     industry = st.text_input("Target industry", value="agricultural technology")
     max_attempts = st.number_input("Maximum validation attempts", min_value=1, max_value=5, value=3)
     configured_model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL_OPTIONS[0])
