@@ -1,3 +1,5 @@
+"""End-to-end synthetic email transformation pipeline."""
+
 from dataclasses import asdict
 from pathlib import Path
 import random
@@ -46,6 +48,7 @@ def retry_guidance(
     report: ValidationReport,
     allowed_domains: Iterable[str] = (),
 ) -> str:
+    """Build category-specific revision instructions from a validation report."""
     errors = " ".join(report.errors).casefold()
     guidance = []
     if "source-derived term leaked" in errors or "source email leaked" in errors or "source phone leaked" in errors:
@@ -67,6 +70,7 @@ def retry_guidance(
 
 
 def clean_model_response(candidate: str) -> str:
+    """Strip model preambles, code fences, and rule separators from a response."""
     candidate = RESPONSE_PREAMBLE_RE.sub("", candidate.strip(), count=1)
     lines = candidate.splitlines()
     if lines and re.fullmatch(r"\s*```(?:email|text)?\s*", lines[0], flags=re.I):
@@ -83,6 +87,7 @@ def clean_model_response(candidate: str) -> str:
 
 
 def strip_model_signoff(candidate: str) -> str:
+    """Remove the model-generated sign-off block from a candidate email."""
     sender = FROM_EMAIL_RE.search(candidate)
     if sender is None:
         return candidate.rstrip()
@@ -118,6 +123,7 @@ def strip_model_signoff(candidate: str) -> str:
 
 
 def preserve_source_identities(candidate: str, sanitized: str) -> str:
+    """Restore sanitized headers and append a consistent sender sign-off."""
     candidate = clean_model_response(candidate)
     candidate = strip_model_signoff(candidate)
     headers = parse_email(sanitized)
@@ -160,6 +166,7 @@ def apply_replacement_edits(
     edits: dict[int, str],
     graph: EntityGraph,
 ) -> tuple[str, str, list[dict[str, str]], ValidationReport]:
+    """Apply user-edited replacements and revalidate the result."""
     updated = [dict(record) for record in replacements]
     changed_indices = set()
     for index, replacement in edits.items():
@@ -289,6 +296,7 @@ def synthesize(
     usage_sink: list[dict[str, Any]] | None = None,
     replacement_sink: list[dict[str, str]] | None = None,
 ):
+    """Transform a source email into a validated synthetic email."""
     ctx = TransformContext()
     graph = EntityGraph(entity_graph_path)
     deny_terms = source_terms(source)

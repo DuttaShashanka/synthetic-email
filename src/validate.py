@@ -1,3 +1,5 @@
+"""Post-generation privacy, structure, and overlap validation."""
+
 import re
 from typing import Iterable, Set
 from .models import ValidationReport
@@ -13,6 +15,7 @@ TOKEN_RE = re.compile(r"[a-z0-9]{3,}", re.I)
 
 
 def normalized_ngrams(text: str, n: int = 5) -> Set[str]:
+    """Return the set of normalized word n-grams in a text."""
     tokens = TOKEN_RE.findall(text.lower())
     return {" ".join(tokens[i:i+n]) for i in range(max(0, len(tokens) - n + 1))}
 
@@ -24,6 +27,7 @@ def validate_output(
     require_fictional_domains: bool = True,
     allowed_domains: Iterable[str] = (),
 ) -> ValidationReport:
+    """Check a synthetic candidate for leakage, placeholders, and structure."""
     errors, warnings = [], []
     low = candidate.lower()
     source_low = source.lower()

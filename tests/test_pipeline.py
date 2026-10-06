@@ -1,3 +1,5 @@
+"""Tests for sanitization, pseudonym persistence, and validation."""
+
 import re
 from pathlib import Path
 from unittest.mock import patch

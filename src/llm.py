@@ -1,3 +1,5 @@
+"""OpenRouter client helpers for rewriting, pseudonyms, and PII extraction."""
+
 import json
 import os
 import requests
@@ -76,6 +78,7 @@ def _openrouter_request(
     max_tokens: int = 100,
     temperature: float = 0.7,
 ) -> str:
+    """Send a chat-completion request and return the model's text response."""
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY is required.")
@@ -151,6 +154,7 @@ def rewrite_with_openrouter(
     retry_guidance: str = "",
     usage_sink: list[dict[str, Any]] | None = None,
 ) -> str:
+    """Rewrite a sanitized email into a fictional email via OpenRouter."""
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
         raise RuntimeError("OPENROUTER_API_KEY is required.")

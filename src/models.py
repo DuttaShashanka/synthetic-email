@@ -1,9 +1,13 @@
+"""Data models shared by the synthetic email pipeline."""
+
 from dataclasses import dataclass, field
 from typing import Dict, List
 
 
 @dataclass
 class ParsedEmail:
+    """Parsed representation of a source email's headers and body."""
+
     sender: str = ""
     recipients: List[str] = field(default_factory=list)
     date: str = ""
@@ -13,6 +17,8 @@ class ParsedEmail:
 
 @dataclass
 class TransformContext:
+    """Per-run caches for pseudonym replacements and reviewable mappings."""
+
     person_map: Dict[str, str] = field(default_factory=dict)
     org_map: Dict[str, str] = field(default_factory=dict)
     email_map: Dict[str, str] = field(default_factory=dict)
@@ -26,6 +32,8 @@ class TransformContext:
 
 @dataclass
 class ValidationReport:
+    """Outcome of post-generation privacy and structure validation."""
+
     valid: bool
     risk_score: float
     errors: List[str]

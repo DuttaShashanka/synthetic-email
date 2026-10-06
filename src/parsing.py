@@ -1,3 +1,5 @@
+"""Email header parsing and header-block utilities."""
+
 import re
 from email.utils import getaddresses
 from .models import ParsedEmail
@@ -16,6 +18,7 @@ LEGACY_HEADER_ALIASES = {
 
 
 def _display_name(value: str) -> str:
+    """Normalize a raw display name into "Given Family" form."""
     display_name = value.split("<", 1)[0].strip().strip('"')
     display_name = re.sub(r"\([^)]*\)", "", display_name).strip().strip('"')
     if "," in display_name:
@@ -26,6 +29,7 @@ def _display_name(value: str) -> str:
 
 
 def _recipient_names(value: str) -> list[str]:
+    """Extract display names from a recipient header value."""
     if not value:
         return []
     entries = re.split(r"(?<=>)\s*,\s*(?=[^<>]*<)", value) if "<" in value else value.split(",")
@@ -41,11 +45,13 @@ def _recipient_names(value: str) -> list[str]:
 
 
 def _recipient_identity(value: str) -> str:
+    """Return a normalized identity key for a recipient value."""
     identity = value.rsplit("@", 1)[0] if "@" in value else value
     return re.sub(r"[^a-z0-9]", "", identity.casefold())
 
 
 def parse_email(raw: str) -> ParsedEmail:
+    """Parse the top header block and body of a raw email message."""
     separator = re.search(r"\r?\n\r?\n", raw)
     # Only the top header block is authoritative: forwarded messages embedded
     # in the body carry their own From/To lines that must not clobber the
@@ -76,6 +82,7 @@ def parse_email(raw: str) -> ParsedEmail:
 
 
 def strip_nonessential_headers(raw: str) -> str:
+    """Keep only provider headers (and legacy X- aliases) from the header block."""
     separator = re.search(r"\r?\n\r?\n", raw)
     if separator is None:
         return raw

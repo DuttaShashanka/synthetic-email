@@ -1,3 +1,5 @@
+"""Streamlit workbench for inspecting synthetic email transformations."""
+
 import os
 import hashlib
 import html
@@ -26,6 +28,7 @@ DEFAULT_MODEL_OPTIONS = (
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_openrouter_models() -> tuple[tuple[str, str], ...]:
+    """Fetch the OpenRouter model catalogue, or fall back to defaults."""
     try:
         response = requests.get("https://openrouter.ai/api/v1/models", timeout=8)
         response.raise_for_status()

@@ -1,3 +1,5 @@
+"""Paired comparison of OpenRouter generation models on a seeded sample."""
+
 import argparse
 import json
 import os
@@ -24,6 +26,7 @@ DEFAULT_JUDGE_MODEL = "openai/gpt-4o-mini"
 
 
 def load_model_prices() -> dict[str, dict[str, float | None]]:
+    """Fetch current per-token pricing for the OpenRouter model catalogue."""
     response = requests.get("https://openrouter.ai/api/v1/models", timeout=30)
     response.raise_for_status()
     catalogue = {}
@@ -40,6 +43,7 @@ def calculate_cost_usd(
     usage: list[dict[str, Any]],
     pricing: dict[str, float | None] | None,
 ) -> float | None:
+    """Compute the total USD cost from provider-reported usage records."""
     if not usage:
         return 0.0
     total = 0.0
@@ -63,6 +67,7 @@ def calculate_cost_usd(
 
 
 def _mean_score(rows: list[dict[str, Any]]) -> float | None:
+    """Return the mean judge score across scored rows."""
     scored = [row for row in rows if row.get("judge_scores")]
     if not scored:
         return None
@@ -77,6 +82,7 @@ def choose_value_model(
     score_tolerance: float = 0.25,
     minimum_coverage: float = 0.9,
 ) -> dict[str, Any] | None:
+    """Select the lowest-cost model within tolerance of the best judge score."""
     eligible = [
         result
         for result in model_results
@@ -119,6 +125,7 @@ def compare_models(
     max_attempts: int = 2,
     score_tolerance: float = 0.25,
 ) -> dict[str, Any]:
+    """Compare generation models on a reproducible, paired email sample."""
     load_dotenv()
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -276,6 +283,7 @@ def compare_models(
 
 
 def main() -> None:
+    """Run the model comparison CLI."""
     parser = argparse.ArgumentParser(description="Compare OpenRouter models on a reproducible email sample")
     parser.add_argument("--input", type=Path, default=Path("data/raw/emails_sample.csv"))
     parser.add_argument("--sample-size", type=int, default=5)

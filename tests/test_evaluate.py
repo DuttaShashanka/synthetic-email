@@ -1,3 +1,5 @@
+"""Tests for LLM-judge score parsing."""
+
 import pytest
 
 from src.evaluate import SCORE_DIMENSIONS, parse_judge_scores

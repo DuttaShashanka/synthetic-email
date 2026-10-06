@@ -1,3 +1,5 @@
+"""Persistent pseudonym registry backed by a local SQLite database."""
+
 import hashlib
 import os
 import re
@@ -9,10 +11,12 @@ ENTITY_KEY_VERSION = "v2"
 
 
 def normalize_identifier(value: str) -> str:
+    """Normalize a source value into a canonical lookup key."""
     return re.sub(r"\s+", " ", value.strip().casefold())
 
 
 def entity_key(entity_type: str, source_value: str) -> str:
+    """Return the stable hashed database key for an entity."""
     normalized = normalize_identifier(source_value)
     return hashlib.sha256(
         f"{ENTITY_KEY_VERSION}\0{entity_type}\0{normalized}".encode("utf-8")
@@ -23,6 +27,7 @@ class EntityGraph:
     """Persistent pseudonym registry with hashed source keys and relationship edges."""
 
     def __init__(self, path: str | Path | None = None):
+        """Open or create the graph database at the configured path."""
         configured_path = path or os.getenv("ENTITY_GRAPH_PATH") or "data/processed/entity_graph.sqlite"
         self.path = Path(configured_path)
         if not self.path.is_absolute():
@@ -51,6 +56,7 @@ class EntityGraph:
         source_value: str,
         make_replacement: Callable[[], str],
     ) -> str:
+        """Return the cached replacement, generating and storing it on first use."""
         identifier = entity_key(entity_type, source_value)
         with sqlite3.connect(self.path) as connection:
             row = connection.execute(
@@ -73,6 +79,7 @@ class EntityGraph:
         target_type: str,
         target_value: str,
     ) -> None:
+        """Record a relationship edge between two entities."""
         with sqlite3.connect(self.path) as connection:
             connection.execute(
                 "INSERT OR IGNORE INTO relationships VALUES (?, ?, ?)",
@@ -86,11 +93,13 @@ class EntityGraph:
     def update_replacement(
         self, entity_type: str, source_value: str, replacement: str
     ) -> None:
+        """Insert or update a single entity replacement."""
         self.update_replacements(
             [{"entity_type": entity_type, "source_value": source_value, "replacement": replacement}]
         )
 
     def update_replacements(self, updates: list[dict[str, str]]) -> None:
+        """Insert or update multiple entity replacements."""
         with sqlite3.connect(self.path) as connection:
             for update in updates:
                 entity_type = update["entity_type"]
@@ -108,6 +117,7 @@ class EntityGraph:
                     )
 
     def synthetic_email_domains(self) -> set[str]:
+        """Return the set of synthetic email domains recorded in the graph."""
         with sqlite3.connect(self.path) as connection:
             rows = connection.execute(
                 "SELECT replacement FROM entities WHERE entity_type = 'synthetic_email_v3'"
@@ -119,6 +129,7 @@ class EntityGraph:
         }
 
     def relationship_count(self) -> int:
+        """Return the number of recorded relationship edges."""
         with sqlite3.connect(self.path) as connection:
             row = connection.execute("SELECT COUNT(*) FROM relationships").fetchone()
         return int(row[0]) if row else 0

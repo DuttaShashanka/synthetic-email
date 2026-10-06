@@ -1,3 +1,5 @@
+"""Deterministic PII detection, redaction, and pseudonym generation."""
+
 import hashlib
 import re
 from datetime import date, timedelta
@@ -59,6 +61,7 @@ COMMON_PHRASE_WORDS = NON_IDENTIFYING_TERMS | {
 
 
 def _name_word_set(attribute: str) -> set[str]:
+    """Load a set of lowercase given or family name words from faker."""
     from faker.providers.person.en_US import Provider as EnUSPerson
     value = getattr(EnUSPerson, attribute)
     if callable(value) and not isinstance(value, dict):
@@ -73,6 +76,7 @@ _FAMILY_NAMES = _name_word_set("last_names")
 
 
 def _plausible_person(name: str, text: str) -> bool:
+    """Check whether an extracted name looks like a real person, not a phrase."""
     words = name.split()
     if len(words) < 2:
         return False
@@ -90,6 +94,7 @@ def _plausible_person(name: str, text: str) -> bool:
 
 
 def _plausible_organization(name: str, text: str) -> bool:
+    """Check whether an extracted organization name is specific or suffixed."""
     if not name or name.casefold() not in text.casefold():
         return False
     if " " not in name.strip():
@@ -98,10 +103,12 @@ def _plausible_organization(name: str, text: str) -> bool:
 
 
 def stable_index(value: str, count: int) -> int:
+    """Map a source value to a stable index in the range [0, count)."""
     return int(hashlib.sha256(value.lower().encode()).hexdigest(), 16) % count
 
 
 def fake_name(value: str, industry: str = "general business") -> str:
+    """Generate a fictional person name for a source value."""
     return generate_pseudonym("person", value, industry)
 
 
@@ -112,6 +119,7 @@ def record_replacement(
     replacement: str,
     person_source_value: str = "",
 ) -> None:
+    """Record a source-to-replacement mapping in the transform context."""
     if not source_value or not replacement or source_value == replacement:
         return
     for record in ctx.replacements:
@@ -131,6 +139,7 @@ def record_replacement(
 
 
 def normalize_person_name(value: str) -> str:
+    """Normalize a display name into "Given Family" form, or "" if unusable."""
     name = re.sub(r"\([^)]*\)", "", value).strip().strip('"\' ')
     if "," in name:
         surname, given_names = (part.strip() for part in name.split(",", 1))
@@ -141,6 +150,7 @@ def normalize_person_name(value: str) -> str:
 
 
 def email_matches_person(source_email: str, person_name: str) -> bool:
+    """Check whether an email address plausibly belongs to a person name."""
     local_part = re.sub(r"[^a-z0-9]", "", source_email.rsplit("@", 1)[0].casefold())
     name_parts = re.findall(r"[a-z]+", normalize_person_name(person_name).casefold())
     if not name_parts:
@@ -167,6 +177,7 @@ def fake_email(
     person_name: str | None = None,
     industry: str = "general business",
 ) -> str:
+    """Return a stable synthetic email address for a source address."""
     if source_email not in ctx.email_map:
         person_key = person_name or source_email
         name = graph.resolve("person", person_key, lambda: fake_name(person_key, industry))
@@ -197,6 +208,7 @@ def fake_email(
 
 
 def replacement_date(value: str, ctx: TransformContext) -> str:
+    """Return a deterministic replacement date for a source date."""
     if value not in ctx.date_map:
         offset = 365 + stable_index(value, 1095)
         ctx.date_map[value] = (date(2024, 1, 1) + timedelta(days=offset)).isoformat()
@@ -204,6 +216,7 @@ def replacement_date(value: str, ctx: TransformContext) -> str:
 
 
 def replacement_money(value: str, ctx: TransformContext) -> str:
+    """Return a deterministic replacement amount for a source monetary value."""
     if value not in ctx.money_map:
         n = 25 + stable_index(value, 850)
         ctx.money_map[value] = f"${n:,},000"
@@ -211,6 +224,7 @@ def replacement_money(value: str, ctx: TransformContext) -> str:
 
 
 def replacement_phone(value: str, ctx: TransformContext) -> str:
+    """Return a deterministic replacement phone number for a source phone."""
     if value not in ctx.phone_map:
         n = 1000000 + stable_index(value, 8999999)
         ctx.phone_map[value] = f"+1-202-555-{n % 10000:04d}"
@@ -220,6 +234,7 @@ def replacement_phone(value: str, ctx: TransformContext) -> str:
 def redact_direct_identifiers(
     text: str, ctx: TransformContext, graph: EntityGraph | None = None, industry: str = "general business"
 ) -> str:
+    """Replace direct identifiers with pseudonyms before any external call."""
     graph = graph or EntityGraph()
     known_people: dict[str, tuple[str, str]] = {}
     email_people: dict[str, str] = {}
@@ -298,6 +313,7 @@ def redact_direct_identifiers(
     email_placeholders: dict[str, str] = {}
 
     def _protect_email(match: re.Match[str]) -> str:
+        """Temporarily protect an email address with a placeholder key."""
         key = f"[[EMAIL_{len(email_placeholders)}]]"
         email_placeholders[key] = match.group(0)
         return key
@@ -318,6 +334,7 @@ def redact_direct_identifiers(
         text = text.replace(placeholder, replacement)
 
     def redact_url(match: re.Match[str]) -> str:
+        """Replace a URL with a neutral portal placeholder."""
         replacement = "https://portal.northstar.example"
         record_replacement(ctx, "url", match.group(0), replacement)
         return replacement
@@ -325,6 +342,7 @@ def redact_direct_identifiers(
     text = URL_RE.sub(redact_url, text)
 
     def protect_date(match: re.Match[str]) -> str:
+        """Replace a date with a deterministic replacement via a placeholder key."""
         replacement = graph.resolve(
             "date", match.group(0), lambda: replacement_date(match.group(0), ctx)
         )
@@ -334,6 +352,7 @@ def redact_direct_identifiers(
 
     text = DATE_RE.sub(protect_date, text)
     def redact_phone(match: re.Match[str]) -> str:
+        """Replace a phone number with a deterministic synthetic number."""
         replacement = graph.resolve(
             "phone", match.group(0), lambda: replacement_phone(match.group(0), ctx)
         )
@@ -341,6 +360,7 @@ def redact_direct_identifiers(
         return replacement
 
     def redact_money(match: re.Match[str]) -> str:
+        """Replace a monetary value with a deterministic synthetic amount."""
         replacement = graph.resolve(
             "money", match.group(0), lambda: replacement_money(match.group(0), ctx)
         )
@@ -352,6 +372,7 @@ def redact_direct_identifiers(
     for index, replacement in enumerate(replacement_dates):
         text = text.replace(f"[[DATE_{index}]]", replacement)
     def redact_organization(match: re.Match[str]) -> str:
+        """Replace a legal-suffixed organization with a fictional name."""
         replacement = graph.resolve(
             "organization", match.group(0), lambda: fake_company(match.group(0), industry)
         )
@@ -359,6 +380,7 @@ def redact_direct_identifiers(
         return replacement
 
     def redact_project(match: re.Match[str]) -> str:
+        """Replace an all-caps project or acronym with a fictional name."""
         source_value = match.group(0)
         if source_value in COMMON_ACRONYMS:
             return source_value
@@ -373,10 +395,12 @@ def redact_direct_identifiers(
 
 
 def fake_company(value: str, industry: str = "general business") -> str:
+    """Generate a fictional organization name for a source value."""
     return generate_pseudonym("organization", value, industry)
 
 
 def fake_project(value: str, industry: str = "general business") -> str:
+    """Generate a fictional project name for a source value."""
     return generate_pseudonym("project", value, industry)
 
 
@@ -421,6 +445,7 @@ def llm_extract_pii(text: str, industry: str = "general business", model: str | 
 
 
 def source_terms(raw: str, extra_terms: Iterable[str] = ()) -> Set[str]:
+    """Collect the deny-list of source-derived terms for a raw email."""
     terms = set()
     for email in EMAIL_RE.findall(raw):
         terms.add(email.lower())
@@ -440,6 +465,7 @@ def source_terms(raw: str, extra_terms: Iterable[str] = ()) -> Set[str]:
 
 
 def person_names(raw: str) -> Set[str]:
+    """Find person-name-like spans in a raw email using regex heuristics."""
     names = {
         match.group(0)
         for match in PERSON_NAME_RE.finditer(raw)
@@ -455,6 +481,7 @@ def person_names(raw: str) -> Set[str]:
 
 
 def person_aliases(raw: str) -> dict[str, str]:
+    """Map standalone first names in a raw email to their full person names."""
     aliases: dict[str, str] = {}
     for name in person_names(raw):
         first_name = name.split()[0]
@@ -475,6 +502,7 @@ def redact_source_terms(
     ctx: TransformContext | None = None,
     industry: str = "general business",
 ) -> str:
+    """Replace source-derived terms with pseudonyms or neutral substitutes."""
     graph = graph or EntityGraph()
     person_keys = {re.sub(r"\s+", " ", name.strip().casefold()) for name in known_people}
     person_keys.update((known_aliases or {}).keys())

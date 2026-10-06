@@ -1,3 +1,5 @@
+"""Tests for cost calculation and value-model selection."""
+
 from src.compare_models import calculate_cost_usd, choose_value_model
 
 

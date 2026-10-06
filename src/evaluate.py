@@ -1,3 +1,5 @@
+"""Sample evaluation with deterministic checks and LLM-as-judge scoring."""
+
 import argparse
 import csv
 import json
@@ -37,6 +39,7 @@ relationship_preservation, email_realism, structure_quality, training_utility.
 
 
 def parse_judge_scores(content: str) -> dict[str, int]:
+    """Parse a judge response into the five required integer scores."""
     match = re.search(r"\{.*\}", content, flags=re.S)
     if match is None:
         raise ValueError("Judge response did not contain a JSON object")
@@ -62,6 +65,7 @@ def judge_quality(
     api_key: str,
     usage_sink: list[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
+    """Score a candidate with an LLM judge on five utility dimensions."""
     base_user_prompt = (
         "Sanitized source email:\n---\n"
         + sanitized_source
@@ -113,6 +117,7 @@ def judge_quality(
 
 
 def _percentile(values: list[int], percentile: float) -> float:
+    """Return the given percentile of a list of values."""
     if not values:
         return 0.0
     ordered = sorted(values)
@@ -121,6 +126,7 @@ def _percentile(values: list[int], percentile: float) -> float:
 
 
 def _load_sample(path: Path, sample_size: int, seed: int) -> tuple[int, list[tuple[int, str]]]:
+    """Select a reproducible random sample of eligible messages."""
     csv.field_size_limit(sys.maxsize)
     eligible: list[tuple[int, str]] = []
     with path.open(newline="", encoding="utf-8", errors="replace") as stream:
@@ -151,6 +157,7 @@ def evaluate_sample(
     judge_model: str | None = None,
     max_attempts: int = 2,
 ) -> dict[str, Any]:
+    """Run the sample evaluation pipeline and return aggregate metrics."""
     load_dotenv()
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -264,6 +271,7 @@ def evaluate_sample(
 
 
 def main() -> None:
+    """Run the sample evaluation CLI."""
     parser = argparse.ArgumentParser(description="Evaluate synthetic email generation on a small CSV sample")
     parser.add_argument("--input", type=Path, default=Path("data/raw/emails_sample.csv"))
     parser.add_argument("--sample-size", type=int, default=5)

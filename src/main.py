@@ -1,3 +1,5 @@
+"""Command-line interface for single-email synthetic generation."""
+
 import argparse
 import json
 from dataclasses import asdict
@@ -6,6 +8,7 @@ from .pipeline import synthesize
 
 
 def main():
+    """Parse arguments, run the pipeline, and write outputs and reports."""
     parser = argparse.ArgumentParser(description="Privacy-first synthetic email generator")
     parser.add_argument("input_file", type=Path)
     parser.add_argument("--industry", default="renewable energy")
