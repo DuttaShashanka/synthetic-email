@@ -36,11 +36,11 @@ test -f .env || cp .env.example .env
 streamlit run app.py
 ```
 
-The workbench visualizes parsing, direct-identifier sanitization, rewriting, and validation. Offline mode requires no API key. OpenRouter mode reads `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` from `.env`; only the directly sanitized email is sent to the provider. Do not use confidential email unless external processing is approved.
+The workbench visualizes parsing, direct-identifier sanitization, rewriting, and validation. OpenRouter mode reads `OPENROUTER_API_KEY` and `OPENROUTER_MODEL` from `.env`; only the directly sanitized email is sent to the provider. Do not use confidential email unless external processing is approved.
 
 The **Replacements** tab shows highlighted source-to-synthetic mappings detected during sanitization. Edit a synthetic value and select **Save replacements** to update the current preview and the local entity graph. Edits are validated before persistence; linked person and email mappings are kept in sync.
 
-## Run with LLM rewriting
+## Run with OpenRouter
 
 ```bash
 python -m src.main examples/input_email.txt \
@@ -51,37 +51,7 @@ python -m src.main examples/input_email.txt \
 
 The pipeline stores stable pseudonym mappings and recognized person/email/domain relationships in `data/processed/entity_graph.sqlite`. This directory is ignored by Git. Set `ENTITY_GRAPH_PATH` or pass `--entity-graph` to share a registry across runs or select a separate registry for a study. Keep the registry access-controlled: it stores pseudonyms and relationship edges, while source identifiers are stored as hashes. Hashes are not anonymization and may be guessable; the graph uses heuristic entity recognition and does not guarantee complete coreference or preserve statistical distributions by itself.
 
-## Run offline / deterministic fallback
-
-```bash
-python -m src.main examples/input_email.txt --offline
-```
-
-Offline mode produces a safe but less natural pseudonymized email. The LLM mode is the intended quality path. Only the direct-identifier-sanitized content is transmitted to OpenRouter.
-
-## What the validator checks
-
-- Original email addresses and phone numbers.
-- Original source tokens, person names, organization names, and domains supplied in the source deny-list.
-- `enron` references and source domains.
-- Unresolved placeholder tokens such as `[[PERSON_1]]`.
-- Excessive copied phrase overlap, using normalized 5-grams.
-- Basic email structure: headers, subject, readable body, and an address using one of the prototype's synthetic `.com` domains.
-
-The generated `.com` addresses are illustrative identities for synthetic data only. They are not verified as unregistered and must not be used to send email or represent real organizations.
-
-The validator returns a risk report. It does not silently pass unsafe output: after the configured retry limit, the CLI exits with a non-zero error.
-
-## Architecture
-
-```text
-source email
-  -> parse headers / collect sensitive terms
-  -> deterministic PII substitution (stable mapping)
-  -> LLM semantic rewrite of sanitized text
-  -> post-generation privacy + structure + overlap validation
-  -> accept, regenerate, or fail closed
-```
+Only the directly sanitized email is transmitted to OpenRouter — never the raw source. The OpenRouter API key is required; set `OPENROUTER_API_KEY` and optionally `OPENROUTER_MODEL` in `.env`.
 
 ## Testing
 

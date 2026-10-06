@@ -133,28 +133,23 @@ SAMPLE_EMAIL = Path(__file__).parent / "examples" / "input_email.txt"
 
 with st.sidebar:
     st.markdown('<p class="eyebrow">Run configuration</p>', unsafe_allow_html=True)
-    mode = st.radio("Rewrite mode", ["OpenRouter"], index=0)
     industry = st.text_input("Target industry", value="agricultural technology")
     max_attempts = st.number_input("Maximum validation attempts", min_value=1, max_value=5, value=3)
     configured_model = os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL_OPTIONS[0])
-    if mode == "OpenRouter":
-        model_catalogue = dict(get_openrouter_models())
-        if configured_model not in model_catalogue:
-            model_catalogue[configured_model] = f"Configured: {configured_model}"
-        model_ids = list(model_catalogue)
-        model = st.selectbox(
-            "OpenRouter model",
-            options=model_ids,
-            index=model_ids.index(configured_model),
-            format_func=lambda model_id: f"{model_catalogue[model_id]} ({model_id})",
-            help="Search model names or IDs from the OpenRouter catalogue.",
-        )
-    else:
-        model = configured_model
+    model_catalogue = dict(get_openrouter_models())
+    if configured_model not in model_catalogue:
+        model_catalogue[configured_model] = f"Configured: {configured_model}"
+    model_ids = list(model_catalogue)
+    model = st.selectbox(
+        "OpenRouter model",
+        options=model_ids,
+        index=model_ids.index(configured_model),
+        format_func=lambda model_id: f"{model_catalogue[model_id]} ({model_id})",
+        help="Search model names or IDs from the OpenRouter catalogue.",
+    )
     key_ready = bool(os.getenv("OPENROUTER_API_KEY"))
     st.caption("OpenRouter credential: configured" if key_ready else "OpenRouter credential: not configured")
-    if mode == "OpenRouter":
-        st.info("Only the directly sanitized email is sent to OpenRouter. Avoid entering confidential data unless approved for external processing.")
+    st.info("Only the directly sanitized email is sent to OpenRouter. Avoid entering confidential data unless approved for external processing.")
 
 st.markdown('<p class="eyebrow">Privacy-first email transformation</p>', unsafe_allow_html=True)
 st.title("Synthetic Email Workbench")
@@ -190,7 +185,6 @@ if run_clicked:
                 source,
                 industry.strip() or "general business",
                 model.strip() or None,
-                offline=mode == "Offline",
                 max_attempts=int(max_attempts),
                 replacement_sink=replacement_records,
             )
@@ -332,7 +326,7 @@ else:
         [
             ("01  Parse", "Email headers and body"),
             ("02  Sanitize", "Deterministic substitutions"),
-            ("03  Rewrite", "Offline or OpenRouter"),
+            ("03  Rewrite", "OpenRouter LLM"),
             ("04  Validate", "Privacy and structure gates"),
         ],
     ):

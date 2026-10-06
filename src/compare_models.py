@@ -142,7 +142,6 @@ def compare_models(
                     source,
                     industry,
                     model=model,
-                    offline=False,
                     max_attempts=max_attempts,
                     usage_sink=generation_usage,
                 )

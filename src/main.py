@@ -10,7 +10,6 @@ def main():
     parser.add_argument("input_file", type=Path)
     parser.add_argument("--industry", default="renewable energy")
     parser.add_argument("--model", default=None)
-    parser.add_argument("--offline", action="store_true")
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--entity-graph", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
@@ -20,7 +19,7 @@ def main():
 
     source = args.input_file.read_text(encoding="utf-8")
     candidate, report, sanitized, attempts = synthesize(
-        source, args.industry, args.model, args.offline, args.max_attempts, args.entity_graph
+        source, args.industry, args.model, args.max_attempts, args.entity_graph
     )
     payload = {"attempts": attempts, **asdict(report)}
 

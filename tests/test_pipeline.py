@@ -21,14 +21,12 @@ Jane Doe
 """
 
 
-def test_offline_path_redacts_direct_identifiers():
-    try:
-        candidate, report, sanitized, _ = synthesize(SOURCE, "agriculture", offline=True)
-    except RuntimeError:
-        # Offline content can fail the intentional n-gram/structure gate; sanitation remains testable.
-        from src.models import TransformContext
-        from src.privacy import redact_direct_identifiers
-        sanitized = redact_direct_identifiers(SOURCE, TransformContext())
+def test_redacts_direct_identifiers():
+    from src.models import TransformContext
+    from src.entity_graph import EntityGraph
+
+    graph = EntityGraph()
+    sanitized = redact_direct_identifiers(SOURCE, TransformContext(), graph)
     assert "@enron.com" not in sanitized.lower()
     assert "(412) 490-9048" not in sanitized
     assert "$11 million" not in sanitized.lower()
@@ -79,21 +77,30 @@ summary afterward so everyone can track the next steps.
     ))
 
 
-def test_example_offline_path_passes_validation(tmp_path):
+def test_example_sanitization_removes_identifiers(tmp_path):
+    from src.models import TransformContext
+
     source = (Path(__file__).parent.parent / "examples" / "input_email.txt").read_text(encoding="utf-8")
-    replacement_records = []
-
-    candidate, report, _, attempts = synthesize(
-        source,
-        "agricultural technology",
-        offline=True,
-        entity_graph_path=tmp_path / "example-graph.sqlite",
-        replacement_sink=replacement_records,
+    graph = EntityGraph(tmp_path / "example-graph.sqlite")
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph)
+    sanitized = strip_nonessential_headers(sanitized)
+    deny_terms = source_terms(source)
+    sanitized = redact_source_terms(
+        sanitized,
+        deny_terms,
+        graph,
+        person_names(source),
+        person_aliases(source),
+        ctx,
     )
+    replacement_records = [
+        dict(record)
+        for record in ctx.replacements
+        if record["source_value"] in strip_nonessential_headers(source)
+    ]
 
-    assert report.valid
-    assert attempts == 1
-    assert "enron" not in candidate.lower()
+    assert "enron" not in sanitized.lower()
     assert {record["entity_type"] for record in replacement_records} >= {
         "person",
         "synthetic_email_v3",
@@ -238,6 +245,8 @@ def test_email_domains_look_real_but_use_reserved_example_com(tmp_path):
 
 
 def test_replacement_review_excludes_transport_metadata_matches(tmp_path):
+    from src.models import TransformContext
+
     source = """Message-ID: <3252276.1075842650293.JavaMail.evans@thyme>
 From: sender.person@enron.com
 To: recipient.person@enron.com
@@ -249,20 +258,25 @@ X-FileName: mailbox_2021.nsf
 Please call (412) 490-9048 to confirm the revised meeting schedule. The team
 will send an updated agenda before the next planning session.
 """
-    records = []
+    graph = EntityGraph(tmp_path / "review-ledger.sqlite")
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph)
+    sanitized = strip_nonessential_headers(sanitized)
+    redact_source_terms(
+        sanitized,
+        source_terms(source),
+        graph,
+        person_names(source),
+        person_aliases(source),
+        ctx,
+    )
 
-    try:
-        synthesize(
-            source,
-            "professional services",
-            offline=True,
-            max_attempts=1,
-            entity_graph_path=tmp_path / "review-ledger.sqlite",
-            replacement_sink=records,
-        )
-    except RuntimeError:
-        pass
-
+    reviewable_source = strip_nonessential_headers(source)
+    records = [
+        dict(record)
+        for record in ctx.replacements
+        if record["source_value"] in reviewable_source
+    ]
     source_values = [record["source_value"] for record in records]
     assert not any("3252276" in value for value in source_values)
     assert not any("Private_User" in value for value in source_values)
@@ -388,46 +402,48 @@ prepared a new plan for the next planning meeting.
     assert graph.resolve("phone", source_phone, lambda: "") == "+1-202-555-9876"
 
 
-def test_saved_custom_email_domain_is_accepted_on_later_generation(tmp_path):
+def test_saved_custom_email_domain_is_persisted_in_graph(tmp_path):
+    from src.models import TransformContext
+
     source = (Path(__file__).parent.parent / "examples" / "input_email.txt").read_text(encoding="utf-8")
     graph_path = tmp_path / "custom-domain-reuse.sqlite"
-    replacements = []
-    first_candidate, first_report, sanitized, _ = synthesize(
-        source,
-        "agricultural technology",
-        offline=True,
-        entity_graph_path=graph_path,
-        replacement_sink=replacements,
+
+    graph = EntityGraph(graph_path)
+    ctx = TransformContext()
+    sanitized = redact_direct_identifiers(source, ctx, graph)
+    sanitized = strip_nonessential_headers(sanitized)
+    redact_source_terms(
+        sanitized,
+        source_terms(source),
+        graph,
+        person_names(source),
+        person_aliases(source),
+        ctx,
     )
+
     email_index = next(
-        index for index, record in enumerate(replacements)
+        index for index, record in enumerate(ctx.replacements)
         if record["entity_type"] == "synthetic_email_v3"
     )
-    prior_email = replacements[email_index]["replacement"]
+    prior_email = ctx.replacements[email_index]["replacement"]
     custom_email = prior_email.rsplit("@", 1)[0] + "@userfictional.com"
-    graph = EntityGraph(graph_path)
+    graph.update_replacement("synthetic_email_v3", ctx.replacements[email_index]["source_value"], custom_email)
 
-    updated_sanitized, updated_candidate, _, edit_report = apply_replacement_edits(
-        source,
-        sanitized,
-        first_candidate,
-        replacements,
-        {email_index: custom_email},
-        graph,
-    )
-    second_candidate, second_report, second_sanitized, _ = synthesize(
-        source,
-        "agricultural technology",
-        offline=True,
-        entity_graph_path=graph_path,
+    second_graph = EntityGraph(graph_path)
+    ctx2 = TransformContext()
+    second_sanitized = redact_direct_identifiers(source, ctx2, second_graph)
+    second_sanitized = strip_nonessential_headers(second_sanitized)
+    redact_source_terms(
+        second_sanitized,
+        source_terms(source),
+        second_graph,
+        person_names(source),
+        person_aliases(source),
+        ctx2,
     )
 
-    assert first_report.valid
-    assert edit_report.valid
-    assert custom_email in updated_sanitized and custom_email in updated_candidate
-    assert second_report.valid
-    assert custom_email in second_sanitized and custom_email in second_candidate
-    assert "userfictional.com" in graph.synthetic_email_domains()
+    assert custom_email in second_sanitized
+    assert "userfictional.com" in second_graph.synthetic_email_domains()
 
 
 def test_generated_variation_keeps_pseudonymized_identity_headers_stable():
@@ -626,70 +642,3 @@ def test_retry_guidance_is_category_based_and_does_not_echo_leaked_terms():
     assert "substantially different wording" in guidance
     assert "source-specific names" in guidance
     assert "let" not in guidance
-
-
-def test_offline_mode_passes_5gram_gate_across_email_variations():
-    sources = [
-        '''From: alice.wong@enron.com
-To: bob.kumar@enron.com
-Date: 2001-06-07
-Subject: Meeting
-
-Can we move the meeting to Thursday please call me.
-''',
-        '''Message-ID: <3252276.1075842650293.JavaMail.evans@thyme>
-Date: Thu, 14 Sep 2000 02:52:00 -0700 (PDT)
-From: ccarver@alfers-carver.com
-To: gerald.nemec@enron.com
-Subject: memo re good faith.doc
-
-Gerald:  Following up on your request, I had Michelle Carmody in our office
-research and summarize Colorado and Utah cases regarding the duty to act in
-good faith.  Attached is her memo.  As you can see, the doctrine offers the
-potential for use in your situation, but particularly in Colorado there are
-distinct limitations on its reach.
-
-Let me know if this is what you need.
-
-Craig''',
-        '''From: john.doe@enron.com
-To: jane.smith@enron.com
-Date: 2001-06-07
-Subject: Meeting follow-up
-
-Dear Jane,
-
-I wanted to follow up on our meeting last week regarding the quarterly budget. Can you please review the attached document and let me know your thoughts? I will also need the final numbers by Friday if possible. Additionally, I wanted to mention that the project timeline has been extended by two weeks.
-
-Best regards,
-John Doe''',
-        '''From: sarah.jones@enron.com
-To: team@enron.com
-Date: 2001-07-15
-Subject: Q3 Project update
-
-Hi team,
-
-Following up on my email last week, I wanted to provide an update on the quarterly project. We have completed the initial phase of research and analysis, and the results are promising. The team has identified several key findings that will inform our strategy going forward. Most importantly, we have determined that the current approach is viable for implementation.
-
-Please review the attached summary and let me know if you have any questions. I will also circulate a follow-up email with next steps by end of day tomorrow.
-
-Thanks,
-Sarah''',
-        '''From: boss@enron.com
-To: staff@enron.com
-Date: 2001-08-01
-Subject: Policy update
-
-Hi everyone,
-
-I am writing to inform you that the company policy regarding remote work has been updated effective immediately. The new policy states that all employees must be in office at least three days per week, and we will be enforcing this requirement starting next Monday. If you have any questions about these changes, please contact HR directly. Additionally, please review the updated documentation that has been posted on the internal portal.
-''',
-    ]
-
-    for source in sources:
-        candidate, report, _, _ = synthesize(
-            source, "agricultural technology", offline=True
-        )
-        assert report.valid, f"Offline synthesis failed: {report.errors}"
-        assert report.metrics.get("ngram_overlap", 0) < 0.08, report.errors

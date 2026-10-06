@@ -184,7 +184,6 @@ def evaluate_sample(
                 source,
                 industry,
                 configured_generation_model,
-                offline=False,
                 max_attempts=max_attempts,
             )
         except Exception as error:

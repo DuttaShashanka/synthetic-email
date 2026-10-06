@@ -10,7 +10,7 @@ You receive an already privacy-sanitized email. Rewrite it as a natural email fr
 
 Hard rules:
 - Never restore, infer, or invent real identities, organizations, addresses, accounts, or source-company facts.
-- Use only fictional people and organizations. Use only these synthetic email domains: northstarfieldservices.com, harborpeakconsulting.com, verdantbridgesolutions.com.
+- Use only fictional people and organizations.
 - Replace distinctive transaction names, project names, unusual quantities, precise commercial terms, and rare factual combinations with plausible but non-identifying equivalents.
 - Preserve broad communication function: request, approval, escalation, update, scheduling, or negotiation; preserve the author-recipient relationship and approximate length.
 - Rephrase the subject and every body sentence; do not copy source wording or distinctive sentence structure.
@@ -30,7 +30,7 @@ def rewrite_with_openrouter(
 ) -> str:
     key = os.getenv("OPENROUTER_API_KEY")
     if not key:
-        raise RuntimeError("OPENROUTER_API_KEY is required unless --offline is used.")
+        raise RuntimeError("OPENROUTER_API_KEY is required.")
     model = model or os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.1-8b-instruct")
     user = f"Target industry: {industry}\n\nSanitized input:\n---\n{sanitized_email}\n---"
     if retry_guidance:
